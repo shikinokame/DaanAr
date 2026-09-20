@@ -1,0 +1,42 @@
+# OS & Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+.idea/
+.vscode/
+
+# Backend (daanar-api)
+daanar-api/.env
+daanar-api/.env.*
+!daanar-api/.env.example
+daanar-api/vendor/
+daanar-api/node_modules/
+daanar-api/public/storage
+daanar-api/public/build
+daanar-api/public/hot
+daanar-api/storage/*.key
+daanar-api/storage/logs/*.log
+daanar-api/storage/framework/cache/*
+daanar-api/storage/framework/sessions/*
+daanar-api/storage/framework/views/*
+!daanar-api/storage/framework/cache/.gitignore
+!daanar-api/storage/framework/sessions/.gitignore
+!daanar-api/storage/framework/views/.gitignore
+
+# Mobile App (daanar_app)
+daanar_app/.dart_tool/
+daanar_app/.flutter-plugins
+daanar_app/.flutter-plugins-dependencies
+daanar_app/.pub/
+daanar_app/.pub-cache/
+daanar_app/build/
+daanar_app/android/app/debug/
+daanar_app/android/app/profile/
+daanar_app/android/app/release/
+daanar_app/ios/Flutter/.last_build_id
+
+# Large Binary & Build Artifacts
+*.apk
+*.aab
+*.log

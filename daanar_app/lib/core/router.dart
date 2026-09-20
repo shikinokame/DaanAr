@@ -1,0 +1,45 @@
+
+import 'package:go_router/go_router.dart';
+import '../screens/splash_screen.dart';
+import '../screens/shell_screen.dart';
+import '../screens/home_screen.dart';
+import '../screens/trails_screen.dart';
+import '../screens/map_screen.dart';
+import '../screens/landmark_detail_screen.dart';
+
+final appRouter = GoRouter(
+  initialLocation: '/splash',
+  routes: [
+    GoRoute(
+      path: '/splash',
+      builder: (context, state) => const SplashScreen(),
+    ),
+
+    // Shell with bottom nav (Home | Trails | Map)
+    ShellRoute(
+      builder: (context, state, child) => ShellScreen(child: child),
+      routes: [
+        GoRoute(
+          path: '/home',
+          builder: (context, state) => const HomeScreen(),
+        ),
+        GoRoute(
+          path: '/trails',
+          builder: (context, state) => const TrailsScreen(),
+        ),
+        GoRoute(
+          path: '/map',
+          builder: (context, state) => const MapScreen(),
+        ),
+      ],
+    ),
+
+    // Landmark detail — outside shell (full screen)
+    GoRoute(
+      path: '/landmarks/:id',
+      builder: (context, state) => LandmarkDetailScreen(
+        id: int.parse(state.pathParameters['id']!),
+      ),
+    ),
+  ],
+);
