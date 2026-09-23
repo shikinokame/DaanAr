@@ -4,7 +4,7 @@ use App\Http\Controllers\ArController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect('/admin/login');
 });
 
 // WebAR experience — opened via WebView in Flutter

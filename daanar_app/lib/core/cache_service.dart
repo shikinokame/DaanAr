@@ -12,13 +12,24 @@ class CacheService {
     await prefs.setString(_prefix + key, jsonEncode(data));
   }
 
-  /// Loads a cached list. Returns null if nothing is cached yet.
+  /// Loads a cached list. Returns null if nothing is cached or cache is corrupted.
   static Future<List<Map<String, dynamic>>?> loadList(String key) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefix + key);
     if (raw == null) return null;
-    final decoded = jsonDecode(raw) as List<dynamic>;
-    return decoded.cast<Map<String, dynamic>>();
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        // Corrupted / unexpected format — purge it
+        await prefs.remove(_prefix + key);
+        return null;
+      }
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (_) {
+      // Not valid JSON (e.g. HTML error page accidentally saved)
+      await prefs.remove(_prefix + key);
+      return null;
+    }
   }
 
   /// Saves a single JSON-encodable map under [key].
@@ -27,12 +38,22 @@ class CacheService {
     await prefs.setString(_prefix + key, jsonEncode(data));
   }
 
-  /// Loads a single cached map. Returns null if nothing is cached yet.
+  /// Loads a single cached map. Returns null if nothing is cached or cache is corrupted.
   static Future<Map<String, dynamic>?> loadMap(String key) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefix + key);
     if (raw == null) return null;
-    return jsonDecode(raw) as Map<String, dynamic>;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        await prefs.remove(_prefix + key);
+        return null;
+      }
+      return decoded;
+    } catch (_) {
+      await prefs.remove(_prefix + key);
+      return null;
+    }
   }
 
   /// Removes a specific cache entry.

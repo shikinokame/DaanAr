@@ -19,6 +19,10 @@ class ApiClient {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          // Skips ngrok's browser warning interstitial page.
+          // Without this, ngrok returns HTML instead of JSON,
+          // causing DioException and the app falling back to cache.
+          'ngrok-skip-browser-warning': 'true',
         },
       ),
     );

@@ -61,11 +61,14 @@ class LandmarkCard extends StatelessWidget {
                       CategoryBadge(category: landmark.category, small: true),
                       if (landmark.era != null) ...[
                         const SizedBox(width: 6),
-                        Text(
-                          landmark.era!,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textMuted,
+                        Flexible(
+                          child: Text(
+                            landmark.era!,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textMuted,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -100,15 +103,7 @@ class LandmarkCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (landmark.shortDescription.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      landmark.shortDescription,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.4),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                  // Description omitted from grid cards to prevent overflow.
                 ],
               ),
             ),
@@ -123,7 +118,7 @@ class LandmarkCard extends StatelessWidget {
     if (url != null) {
       return CachedNetworkImage(
         imageUrl: url,
-        height: 140,
+        height: 120,
         width: double.infinity,
         fit: BoxFit.cover,
         placeholder: (_, _1) => _placeholder(),
@@ -136,7 +131,7 @@ class LandmarkCard extends StatelessWidget {
   Widget _placeholder() {
     final color = AppColors.categoryColors[landmark.category] ?? AppColors.primary;
     return Container(
-      height: 140,
+      height: 120,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,

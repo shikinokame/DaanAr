@@ -163,7 +163,10 @@ class _TrailsScreenState extends ConsumerState<TrailsScreen> {
                       crossAxisCount: 2,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
-                      childAspectRatio: 0.72,
+                      // Fixed pixel height — immune to screen size differences.
+                      // image(120) + padding(24) + badge(24) + gap(7)
+                      // + name-2lines(45) + gap(5) + location(18) = 243px + 20 buffer
+                      mainAxisExtent: 263,
                     ),
                     delegate: SliverChildBuilderDelegate(
                       (context, i) => LandmarkCard(landmark: result.landmarks[i]),

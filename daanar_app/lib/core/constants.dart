@@ -1,11 +1,10 @@
 /// App-wide constants for DaanAR.
-/// ngrok HTTPS tunnel — required for WebView camera access (getUserMedia needs HTTPS).
-/// Run: C:\ngrok\ngrok.exe http 192.168.0.27:8000
-/// Update this URL each time ngrok restarts (free tier gives a new URL each time).
+/// DEV SETUP: Run start-ngrok.ps1 to auto-update baseUrl with the live ngrok tunnel.
+/// OR: Set to your local IP (e.g. http://192.168.x.x:8000/api/v1) if on same WiFi.
 class AppConstants {
   AppConstants._();
 
-  // Base URL of the Laravel API (via ngrok HTTPS tunnel)
+  // Base URL of the Laravel API — updated automatically by start-ngrok.ps1
   static const String baseUrl = 'https://letdown-twiddle-thirty.ngrok-free.dev/api/v1';
 
   // Sanctum token storage key
