@@ -21,4 +21,14 @@ class AppConstants {
     'natural',
     'cultural',
   ];
+
+  // ── OpenRouteService (Routing) ───────────────────────────────────────────
+  // Sign up free at: https://openrouteservice.org/dev/#/signup
+  // Paste your key below (free tier: 2,000 requests/day, no credit card)
+  static const String orsApiKey = 'YOUR_ORS_API_KEY'; // set your key from openrouteservice.org
+  static const String orsBaseUrl = 'https://api.openrouteservice.org';
+
+  // Navigation thresholds
+  static const double arProximityMetres = 50.0;  // trigger AR within 50m
+  static const double rerouteThresholdMetres = 30.0; // reroute if > 30m off route
 }
