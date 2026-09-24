@@ -12,6 +12,11 @@ class RoutingService {
     baseUrl: AppConstants.orsBaseUrl,
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 15),
+    headers: {
+      // New ORS JWT tokens go in the Authorization header (not ?api_key=)
+      'Authorization': AppConstants.orsApiKey,
+      'Accept': 'application/json, application/geo+json',
+    },
   ));
 
   /// Calculates a walking route from [origin] to [destination].
@@ -32,7 +37,6 @@ class RoutingService {
       final response = await _dio.get(
         '/v2/directions/foot-walking',
         queryParameters: {
-          'api_key': AppConstants.orsApiKey,
           // ORS uses [longitude, latitude] order — opposite of Google Maps
           'start': '${origin.longitude},${origin.latitude}',
           'end': '${destination.longitude},${destination.latitude}',

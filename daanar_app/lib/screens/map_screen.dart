@@ -39,6 +39,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   double? _remainingMetres;       // straight-line to destination (live)
   bool _autoCenter = true;        // camera follows user when true
 
+  // Stage 4 — rerouting state
+  bool _isRerouting = false;
+
   static const _initialPosition = CameraPosition(
     target: LatLng(16.0430, 120.3333),
     zoom: 11.5,
@@ -157,7 +160,53 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       if (_autoCenter && _mapController != null) {
         _mapController!.animateCamera(CameraUpdate.newLatLng(newPos));
       }
+
+      // Stage 4: deviation check — reroute if walked off the route
+      _checkAndReroute(newPos, destination);
     });
+  }
+
+  // ── Stage 4: deviation detection & rerouting ─────────────────────────────────
+
+  /// Returns the minimum distance (metres) from [point] to any point on the route.
+  double _distanceFromRoute(LatLng point, List<LatLng> routePoints) {
+    double minDist = double.infinity;
+    for (final rp in routePoints) {
+      final d = LocationService.distanceBetween(
+        point.latitude, point.longitude,
+        rp.latitude, rp.longitude,
+      );
+      if (d < minDist) minDist = d;
+    }
+    return minDist;
+  }
+
+  /// Checks deviation from current route. If > threshold, silently recalculates.
+  Future<void> _checkAndReroute(LatLng currentPos, Landmark destination) async {
+    if (_activeRoute == null || _isRerouting) return;
+
+    final deviation = _distanceFromRoute(currentPos, _activeRoute!.points);
+    if (deviation <= AppConstants.rerouteThresholdMetres) return;
+
+    setState(() => _isRerouting = true);
+
+    try {
+      final dest = LatLng(destination.lat, destination.lng);
+      final newRoute = await RoutingService.getWalkingRoute(
+        origin: currentPos,
+        destination: dest,
+      );
+      if (mounted) {
+        setState(() {
+          _activeRoute = newRoute;
+          _remainingMetres = newRoute.distanceMetres;
+          _isRerouting = false;
+        });
+      }
+    } on RoutingException {
+      // Silently keep the existing route if reroute fails
+      if (mounted) setState(() => _isRerouting = false);
+    }
   }
 
   void _stopNavigation() {
@@ -407,6 +456,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               remainingMetres: _remainingMetres,
               initialRoute: _activeRoute,
               autoCenter: _autoCenter,
+              isRerouting: _isRerouting,
               onRecenter: () {
                 setState(() => _autoCenter = true);
                 if (userPos != null && _mapController != null) {
@@ -499,6 +549,7 @@ class _LiveNavPanel extends StatelessWidget {
   final double? remainingMetres;
   final RouteResult? initialRoute;
   final bool autoCenter;
+  final bool isRerouting;
   final VoidCallback onRecenter;
   final VoidCallback onStop;
 
@@ -507,6 +558,7 @@ class _LiveNavPanel extends StatelessWidget {
     required this.remainingMetres,
     required this.initialRoute,
     required this.autoCenter,
+    required this.isRerouting,
     required this.onRecenter,
     required this.onStop,
   });
@@ -561,30 +613,52 @@ class _LiveNavPanel extends StatelessWidget {
                   const Icon(Icons.directions_walk, color: Colors.white, size: 26),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          destination.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                    child: isRerouting
+                        ? Row(
+                            children: [
+                              const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Rerouting…',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                destination.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '$_distanceLabel  ·  $_etaLabel walk',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '$_distanceLabel  ·  $_etaLabel walk',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
