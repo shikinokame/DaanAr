@@ -4,8 +4,8 @@
 class AppConstants {
   AppConstants._();
 
-  // Base URL of the Laravel API — updated automatically by start-ngrok.ps1
-  static const String baseUrl = 'https://letdown-twiddle-thirty.ngrok-free.dev/api/v1';
+  // Base URL of the Laravel API — direct local IP (same WiFi, no ngrok needed)
+  static const String baseUrl = 'http://192.168.0.32:8000/api/v1';
 
   // Sanctum token storage key
   static const String tokenKey = 'auth_token';

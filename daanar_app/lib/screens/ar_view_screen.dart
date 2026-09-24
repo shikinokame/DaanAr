@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../core/constants.dart';
 import '../core/theme.dart';
 
 /// Launches the WebAR experience in the device's native Chrome browser,
@@ -44,9 +45,12 @@ class _ARViewScreenState extends State<ARViewScreen> {
   Future<void> _launchAR() async {
     setState(() => _launching = true);
 
-    final base = 'https://letdown-twiddle-thirty.ngrok-free.dev';
+    // Derive the server base (strip /api/v1 if present)
+    final serverBase = AppConstants.baseUrl
+        .replaceAll('/api/v1', '')
+        .replaceAll(RegExp(r'/$'), '');
     final url = Uri.parse(
-      '$base/ar/landmark/${widget.landmarkId}?ngrok-skip-browser-warning=true',
+      '$serverBase/ar/landmark/${widget.landmarkId}?ngrok-skip-browser-warning=true',
     );
 
     try {

@@ -50,13 +50,15 @@
     .fi-simple-main {
         position: relative !important;
         z-index: 10 !important;
-        background: rgba(18, 24, 38, 0.88) !important;
+        max-width: 440px !important;
+        width: 100% !important;
+        background: rgba(18, 24, 38, 0.92) !important;
         backdrop-filter: blur(18px) !important;
         -webkit-backdrop-filter: blur(18px) !important;
         border: 1px solid rgba(255, 255, 255, 0.09) !important;
         box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 35px rgba(245, 158, 11, 0.08) !important;
         border-radius: 1.25rem !important;
-        padding: 2.5rem !important;
+        padding: 2.25rem !important;
     }
 
     /* Brand Logo / Header */

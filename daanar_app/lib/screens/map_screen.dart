@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../core/theme.dart';
 import '../models/landmark.dart';
 import '../providers/landmark_providers.dart';
+import '../providers/location_provider.dart';
 import '../providers/municipality_providers.dart';
+import '../services/location_service.dart';
 import '../widgets/category_badge.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -32,10 +35,42 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     super.dispose();
   }
 
+  /// Requests GPS and flies the camera to the user's current position.
+  Future<void> _goToMyLocation() async {
+    await ref.read(locationProvider.notifier).requestLocation();
+    final locState = ref.read(locationProvider);
+    if (locState is LocationReady && _mapController != null) {
+      await _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          LatLng(locState.position.latitude, locState.position.longitude),
+          15,
+        ),
+      );
+    } else if (locState is LocationError && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(locState.message),
+          backgroundColor: AppColors.primary,
+          action: locState.type == LocationExceptionType.permissionPermanentlyDenied
+              ? SnackBarAction(
+                  label: 'Settings',
+                  textColor: AppColors.secondary,
+                  onPressed: () async {
+                    await openAppSettings();
+                  },
+                )
+              : null,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final landmarksAsync = ref.watch(landmarkListProvider);
     final municipalitiesAsync = ref.watch(municipalityListProvider);
+    final locationState = ref.watch(locationProvider);
+    final isLocating = locationState is LocationLoading;
 
     return Scaffold(
       appBar: AppBar(
@@ -47,6 +82,27 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               tooltip: 'Clear filter',
               onPressed: () => setState(() => _selectedMunicipality = null),
             ),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // My Location button
+          FloatingActionButton.small(
+            heroTag: 'my_location',
+            onPressed: isLocating ? null : _goToMyLocation,
+            backgroundColor: Colors.white,
+            child: isLocating
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : const Icon(Icons.my_location, color: AppColors.primary),
+          ),
         ],
       ),
       body: Stack(
@@ -78,9 +134,28 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   )
                   .toSet();
 
+              // Add blue GPS dot if location is known
+              final allMarkers = {...markers};
+              if (locationState is LocationReady) {
+                allMarkers.add(
+                  Marker(
+                    markerId: const MarkerId('user_location'),
+                    position: LatLng(
+                      locationState.position.latitude,
+                      locationState.position.longitude,
+                    ),
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueAzure,
+                    ),
+                    infoWindow: const InfoWindow(title: 'You are here'),
+                    zIndex: 2, // render on top of landmark markers
+                  ),
+                );
+              }
+
               return GoogleMap(
                 initialCameraPosition: _initialPosition,
-                markers: markers,
+                markers: allMarkers,
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,
                 mapToolbarEnabled: false,

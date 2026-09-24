@@ -1,4 +1,4 @@
-# DaanAR 🏛️🧭
+# DaanAR 
 **An Augmented Reality Navigation System for Historical Landmarks in Pangasinan**
 
 DaanAR is a specialized mobile augmented reality (AR) navigation and heritage discovery system tailored for historical landmarks across Pangasinan, Philippines. It integrates live location services, curated heritage trails, an AR camera view, and offline data caching.
