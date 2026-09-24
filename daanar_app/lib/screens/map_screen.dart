@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,7 +31,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   RouteResult? _activeRoute;
   Landmark? _routeDestination;
   bool _isCalculatingRoute = false;
-  String? _routeError;
+
+  // Stage 3 — live navigation state
+  StreamSubscription<dynamic>? _positionSubscription;
+  bool _isNavMode = false;
+  LatLng? _livePosition;          // updates every ≥5 m moved
+  double? _remainingMetres;       // straight-line to destination (live)
+  bool _autoCenter = true;        // camera follows user when true
 
   static const _initialPosition = CameraPosition(
     target: LatLng(16.0430, 120.3333),
@@ -39,22 +46,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   void dispose() {
+    _positionSubscription?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
 
-  // ── Location ────────────────────────────────────────────────────────────────
+  // ── Location (one-shot) ──────────────────────────────────────────────────────
 
   Future<void> _goToMyLocation() async {
     await ref.read(locationProvider.notifier).requestLocation();
     final locState = ref.read(locationProvider);
     if (locState is LocationReady && _mapController != null) {
-      await _mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          LatLng(locState.position.latitude, locState.position.longitude),
-          15,
-        ),
-      );
+      final pos = LatLng(locState.position.latitude, locState.position.longitude);
+      setState(() => _livePosition = pos);
+      await _mapController!.animateCamera(CameraUpdate.newLatLngZoom(pos, 15));
     } else if (locState is LocationError && mounted) {
       _showSnackBar(
         locState.message,
@@ -69,54 +74,102 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
-  // ── Routing ─────────────────────────────────────────────────────────────────
+  // ── Routing ──────────────────────────────────────────────────────────────────
 
   Future<void> _navigateTo(Landmark destination) async {
-    // Ensure we have a GPS fix first
+    // Ensure GPS fix
     var locState = ref.read(locationProvider);
     if (locState is! LocationReady) {
       await ref.read(locationProvider.notifier).requestLocation();
       locState = ref.read(locationProvider);
     }
-
     if (locState is! LocationReady) {
       _showSnackBar('Enable location to use navigation.');
       return;
     }
 
+    final originPos = LatLng(
+      locState.position.latitude,
+      locState.position.longitude,
+    );
+
     setState(() {
       _isCalculatingRoute = true;
-      _routeError = null;
       _activeRoute = null;
       _routeDestination = destination;
+      _livePosition = originPos;
     });
 
     try {
-      final origin = LatLng(
-        locState.position.latitude,
-        locState.position.longitude,
-      );
       final dest = LatLng(destination.lat, destination.lng);
-
       final route = await RoutingService.getWalkingRoute(
-        origin: origin,
+        origin: originPos,
         destination: dest,
       );
 
       setState(() {
         _activeRoute = route;
         _isCalculatingRoute = false;
+        _remainingMetres = route.distanceMetres;
       });
 
-      // Fit camera to show entire route
-      await _fitRouteBounds(origin, dest);
+      await _fitRouteBounds(originPos, dest);
+      _startPositionStream(destination);
     } on RoutingException catch (e) {
       setState(() {
-        _routeError = e.message;
         _isCalculatingRoute = false;
+        _routeDestination = null;
       });
       _showSnackBar(e.message);
     }
+  }
+
+  // ── Stage 3: live position stream ────────────────────────────────────────────
+
+  void _startPositionStream(Landmark destination) {
+    _positionSubscription?.cancel();
+    setState(() {
+      _isNavMode = true;
+      _autoCenter = true;
+    });
+
+    _positionSubscription = LocationService.getPositionStream().listen((position) {
+      if (!mounted) return;
+      final newPos = LatLng(position.latitude, position.longitude);
+
+      // Update distance remaining (straight-line to destination)
+      final remaining = LocationService.distanceBetween(
+        position.latitude,
+        position.longitude,
+        destination.lat,
+        destination.lng,
+      );
+
+      setState(() {
+        _livePosition = newPos;
+        _remainingMetres = remaining;
+      });
+
+      // Update location provider so blue dot re-renders
+      ref.read(locationProvider.notifier).updatePosition(position);
+
+      // Auto-center camera on user
+      if (_autoCenter && _mapController != null) {
+        _mapController!.animateCamera(CameraUpdate.newLatLng(newPos));
+      }
+    });
+  }
+
+  void _stopNavigation() {
+    _positionSubscription?.cancel();
+    _positionSubscription = null;
+    setState(() {
+      _isNavMode = false;
+      _activeRoute = null;
+      _routeDestination = null;
+      _remainingMetres = null;
+      _autoCenter = true;
+    });
   }
 
   Future<void> _fitRouteBounds(LatLng origin, LatLng dest) async {
@@ -131,17 +184,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         origin.longitude > dest.longitude ? origin.longitude : dest.longitude,
       ),
     );
-    await _mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 80),
-    );
-  }
-
-  void _clearRoute() {
-    setState(() {
-      _activeRoute = null;
-      _routeDestination = null;
-      _routeError = null;
-    });
+    await _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
   }
 
   void _showSnackBar(String message, {SnackBarAction? action}) {
@@ -163,86 +206,71 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final locationState = ref.watch(locationProvider);
     final isLocating = locationState is LocationLoading;
 
+    // Use live stream position, fall back to one-shot provider position
+    final LatLng? userPos = _livePosition ??
+        (locationState is LocationReady
+            ? LatLng(locationState.position.latitude,
+                locationState.position.longitude)
+            : null);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Heritage Map'),
-        actions: [
-          if (_activeRoute != null)
-            IconButton(
-              icon: const Icon(Icons.directions_off),
-              tooltip: 'Clear route',
-              onPressed: _clearRoute,
-            )
-          else if (_selectedMunicipality != null)
-            IconButton(
-              icon: const Icon(Icons.filter_alt_off),
-              tooltip: 'Clear filter',
-              onPressed: () => setState(() => _selectedMunicipality = null),
-            ),
-        ],
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.small(
-            heroTag: 'my_location',
-            onPressed: isLocating ? null : _goToMyLocation,
-            backgroundColor: Colors.white,
-            child: isLocating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.primary,
-                    ),
+      appBar: _isNavMode
+          ? null // hide AppBar during navigation for more map space
+          : AppBar(
+              title: const Text('Heritage Map'),
+              actions: [
+                if (_activeRoute != null)
+                  IconButton(
+                    icon: const Icon(Icons.directions_off),
+                    tooltip: 'Clear route',
+                    onPressed: _stopNavigation,
                   )
-                : const Icon(Icons.my_location, color: AppColors.primary),
-          ),
-        ],
-      ),
+                else if (_selectedMunicipality != null)
+                  IconButton(
+                    icon: const Icon(Icons.filter_alt_off),
+                    tooltip: 'Clear filter',
+                    onPressed: () =>
+                        setState(() => _selectedMunicipality = null),
+                  ),
+              ],
+            ),
       body: Stack(
         children: [
-          // ── Google Map ──────────────────────────────────────────────────────
+          // ── Google Map ────────────────────────────────────────────────────
           landmarksAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+            loading: () => const Center(
+                child: CircularProgressIndicator(color: AppColors.primary)),
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (result) {
               final filtered = _selectedMunicipality == null
                   ? result.landmarks
                   : result.landmarks
-                      .where((l) => l.municipality?.name == _selectedMunicipality)
+                      .where((l) =>
+                          l.municipality?.name == _selectedMunicipality)
                       .toList();
 
               final markers = filtered.map((l) {
-                final isDestination = _routeDestination?.id == l.id;
+                final isDest = _routeDestination?.id == l.id;
                 return Marker(
                   markerId: MarkerId(l.id.toString()),
                   position: LatLng(l.lat, l.lng),
                   infoWindow: InfoWindow(title: l.name, snippet: l.category),
                   icon: BitmapDescriptor.defaultMarkerWithHue(
-                    isDestination
-                        ? BitmapDescriptor.hueRed
-                        : _categoryHue(l.category),
+                    isDest ? BitmapDescriptor.hueRed : _categoryHue(l.category),
                   ),
-                  zIndex: isDestination ? 1 : 0,
+                  zIndex: isDest ? 1 : 0,
                   onTap: () => setState(() => _selectedLandmark = l),
                 );
               }).toSet();
 
-              // Blue GPS dot
+              // Blue GPS dot (uses live stream position when available)
               final allMarkers = {...markers};
-              if (locationState is LocationReady) {
+              if (userPos != null) {
                 allMarkers.add(Marker(
                   markerId: const MarkerId('user_location'),
-                  position: LatLng(
-                    locationState.position.latitude,
-                    locationState.position.longitude,
-                  ),
+                  position: userPos,
                   icon: BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueAzure,
-                  ),
+                      BitmapDescriptor.hueAzure),
                   infoWindow: const InfoWindow(title: 'You are here'),
                   zIndex: 2,
                 ));
@@ -269,68 +297,63 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 mapToolbarEnabled: false,
                 onMapCreated: (c) => _mapController = c,
                 onTap: (_) => setState(() => _selectedLandmark = null),
+                // Disable auto-center when user manually moves the map
+                onCameraMove: (_) {
+                  if (_isNavMode && _autoCenter) {
+                    setState(() => _autoCenter = false);
+                  }
+                },
               );
             },
           ),
 
-          // ── Municipality filter chips ────────────────────────────────────────
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: municipalitiesAsync.when(
-              loading: () => const SizedBox.shrink(),
-              error: (_, _1) => const SizedBox.shrink(),
-              data: (result) => Container(
-                color: Colors.white.withValues(alpha: 0.93),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: SizedBox(
-                  height: 38,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    children: [
-                      _filterChip('All', _selectedMunicipality == null,
-                          () => setState(() => _selectedMunicipality = null)),
-                      ...result.municipalities.map((m) => _filterChip(
-                            m.name,
-                            _selectedMunicipality == m.name,
-                            () {
-                              setState(() => _selectedMunicipality = m.name);
-                              _mapController?.animateCamera(
-                                CameraUpdate.newLatLngZoom(
-                                    LatLng(m.lat, m.lng), 13),
-                              );
-                            },
-                          )),
-                    ],
+          // ── Municipality filter chips (hidden during nav mode) ─────────────
+          if (!_isNavMode)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: municipalitiesAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, _1) => const SizedBox.shrink(),
+                data: (result) => Container(
+                  color: Colors.white.withValues(alpha: 0.93),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: SizedBox(
+                    height: 38,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      children: [
+                        _filterChip('All', _selectedMunicipality == null,
+                            () => setState(() => _selectedMunicipality = null)),
+                        ...result.municipalities.map((m) => _filterChip(
+                              m.name,
+                              _selectedMunicipality == m.name,
+                              () {
+                                setState(() => _selectedMunicipality = m.name);
+                                _mapController?.animateCamera(
+                                  CameraUpdate.newLatLngZoom(
+                                      LatLng(m.lat, m.lng), 13),
+                                );
+                              },
+                            )),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // ── Route info panel (shows when route is active) ───────────────────
-          if (_activeRoute != null)
-            Positioned(
-              top: 62,
-              left: 12,
-              right: 12,
-              child: _RouteInfoPanel(
-                route: _activeRoute!,
-                destination: _routeDestination!,
-                onClear: _clearRoute,
-              ),
-            ),
-
-          // ── Route calculating indicator ──────────────────────────────────────
+          // ── Route calculating indicator ───────────────────────────────────
           if (_isCalculatingRoute)
             Positioned(
-              top: 62,
+              top: _isNavMode ? 0 : 62,
               left: 12,
               right: 12,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
@@ -364,8 +387,59 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
 
-          // ── Landmark preview sheet ───────────────────────────────────────────
-          if (_selectedLandmark != null)
+          // ── Static route info panel (non-nav mode) ────────────────────────
+          if (_activeRoute != null && !_isNavMode)
+            Positioned(
+              top: 62,
+              left: 12,
+              right: 12,
+              child: _RouteInfoPanel(
+                route: _activeRoute!,
+                destination: _routeDestination!,
+                onClear: _stopNavigation,
+              ),
+            ),
+
+          // ── LIVE NAV PANEL (Stage 3) ──────────────────────────────────────
+          if (_isNavMode && _routeDestination != null)
+            _LiveNavPanel(
+              destination: _routeDestination!,
+              remainingMetres: _remainingMetres,
+              initialRoute: _activeRoute,
+              autoCenter: _autoCenter,
+              onRecenter: () {
+                setState(() => _autoCenter = true);
+                if (userPos != null && _mapController != null) {
+                  _mapController!.animateCamera(
+                    CameraUpdate.newLatLngZoom(userPos, 17),
+                  );
+                }
+              },
+              onStop: _stopNavigation,
+            ),
+
+          // ── FABs (hidden during nav — panel has recenter button) ──────────
+          if (!_isNavMode)
+            Positioned(
+              bottom: _selectedLandmark != null ? 140 : 16,
+              right: 16,
+              child: FloatingActionButton.small(
+                heroTag: 'my_location',
+                onPressed: isLocating ? null : _goToMyLocation,
+                backgroundColor: Colors.white,
+                child: isLocating
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.primary),
+                      )
+                    : const Icon(Icons.my_location, color: AppColors.primary),
+              ),
+            ),
+
+          // ── Landmark preview sheet ─────────────────────────────────────────
+          if (_selectedLandmark != null && !_isNavMode)
             Positioned(
               bottom: 0,
               left: 0,
@@ -378,7 +452,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 onViewDetails: () =>
                     context.push('/landmarks/${_selectedLandmark!.id}'),
                 onNavigate: () => _navigateTo(_selectedLandmark!),
-                onClearRoute: _clearRoute,
+                onClearRoute: _stopNavigation,
               ),
             ),
         ],
@@ -401,8 +475,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
         ),
         backgroundColor: AppColors.cardBg,
-        side: BorderSide(
-            color: selected ? AppColors.primary : AppColors.divider),
+        side:
+            BorderSide(color: selected ? AppColors.primary : AppColors.divider),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       ),
     );
@@ -418,7 +492,155 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       };
 }
 
-// ── Route Info Panel ──────────────────────────────────────────────────────────
+// ── Live Navigation Panel (Stage 3) ──────────────────────────────────────────
+
+class _LiveNavPanel extends StatelessWidget {
+  final Landmark destination;
+  final double? remainingMetres;
+  final RouteResult? initialRoute;
+  final bool autoCenter;
+  final VoidCallback onRecenter;
+  final VoidCallback onStop;
+
+  const _LiveNavPanel({
+    required this.destination,
+    required this.remainingMetres,
+    required this.initialRoute,
+    required this.autoCenter,
+    required this.onRecenter,
+    required this.onStop,
+  });
+
+  String get _distanceLabel {
+    final m = remainingMetres ?? initialRoute?.distanceMetres;
+    if (m == null) return '—';
+    if (m >= 1000) return '${(m / 1000).toStringAsFixed(1)} km';
+    return '${m.toStringAsFixed(0)} m';
+  }
+
+  String get _etaLabel {
+    final m = remainingMetres ?? initialRoute?.distanceMetres;
+    if (m == null) return '—';
+    // Average walking speed: ~1.4 m/s = 84 m/min
+    final minutes = (m / 84).ceil();
+    if (minutes < 60) return '$minutes min';
+    final h = minutes ~/ 60;
+    final min = minutes % 60;
+    return min == 0 ? '$h hr' : '$h hr $min min';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Stack(
+        children: [
+          // ── Top nav bar ────────────────────────────────────────────────────
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 12,
+            right: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.directions_walk, color: Colors.white, size: 26),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          destination.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$_distanceLabel  ·  $_etaLabel walk',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Bottom controls ────────────────────────────────────────────────
+          Positioned(
+            bottom: 24,
+            left: 16,
+            right: 16,
+            child: Row(
+              children: [
+                // Recenter button
+                if (!autoCenter)
+                  Container(
+                    margin: const EdgeInsets.only(right: 10),
+                    child: FloatingActionButton.small(
+                      heroTag: 'recenter',
+                      onPressed: onRecenter,
+                      backgroundColor: Colors.white,
+                      child: const Icon(Icons.my_location, color: AppColors.primary),
+                    ),
+                  ),
+
+                // Stop Navigation button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: onStop,
+                    icon: const Icon(Icons.stop_circle_outlined, size: 20),
+                    label: const Text(
+                      'Stop Navigation',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 4,
+                      shadowColor: Colors.red.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Static Route Info Panel ───────────────────────────────────────────────────
 
 class _RouteInfoPanel extends StatelessWidget {
   final RouteResult route;
@@ -468,10 +690,7 @@ class _RouteInfoPanel extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${route.distanceLabel}  ·  ${route.etaLabel} walk',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
             ),
@@ -529,7 +748,6 @@ class _LandmarkPreviewSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Top row: icon + name + close
             Row(
               children: [
                 Container(
@@ -573,8 +791,7 @@ class _LandmarkPreviewSheet extends StatelessWidget {
                       const SizedBox(height: 3),
                       Row(
                         children: [
-                          CategoryBadge(
-                              category: landmark.category, small: true),
+                          CategoryBadge(category: landmark.category, small: true),
                           const SizedBox(width: 6),
                           Text(
                             landmark.municipality?.name ?? '',
@@ -596,7 +813,6 @@ class _LandmarkPreviewSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            // Bottom row: Navigate + Details buttons
             Row(
               children: [
                 Expanded(
@@ -618,9 +834,8 @@ class _LandmarkPreviewSheet extends StatelessWidget {
                           fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isNavigating
-                          ? AppColors.textMuted
-                          : AppColors.primary,
+                      backgroundColor:
+                          isNavigating ? AppColors.textMuted : AppColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 11),
                       shape: RoundedRectangleBorder(
