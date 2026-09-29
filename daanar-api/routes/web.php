@@ -1,11 +1,11 @@
 <?php
 
 use App\Http\Controllers\ArController;
+use App\Http\Controllers\LandingController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return redirect('/admin/login');
-});
+// Landing page — serves featured landmarks + municipalities from DB
+Route::get('/', [LandingController::class, 'index']);
 
 // WebAR experience — opened via WebView in Flutter
 Route::get('/ar/landmark/{id}', [ArController::class, 'show'])->name('ar.landmark');
@@ -14,3 +14,4 @@ Route::get('/ar/landmark/{id}', [ArController::class, 'show'])->name('ar.landmar
 Route::get('/ar/test', function () {
     return view('ar.test');
 })->name('ar.test');
+

@@ -28,7 +28,7 @@ if ($existing) {
 # 2. Start PHP built-in server
 Write-Host "Starting PHP server on port $port..." -ForegroundColor Yellow
 Start-Process -FilePath $phpPath `
-    -ArgumentList "-S", "0.0.0.0:$port", $routerFile `
+    -ArgumentList "-S", "0.0.0.0:$port", "-t", $apiPublicDir, $routerFile `
     -WorkingDirectory $apiPublicDir `
     -WindowStyle Hidden
 Start-Sleep -Seconds 3
