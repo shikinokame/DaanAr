@@ -8,12 +8,14 @@ import '../core/constants.dart';
 import '../core/theme.dart';
 import '../models/landmark.dart';
 import '../models/route_result.dart';
+import '../models/transport_mode.dart';
 import '../providers/landmark_providers.dart';
 import '../providers/location_provider.dart';
 import '../providers/municipality_providers.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
 import '../widgets/category_badge.dart';
+import 'ar_view_screen.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -41,6 +43,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   // Stage 4 — rerouting state
   bool _isRerouting = false;
+
+  // Stage 5 — AR proximity state
+  bool _arPromptShown = false;
+  bool _showArProximityBanner = false;
+
+  // Transport mode selection (persists for the session)
+  TransportMode _selectedMode = TransportMode.walking;
 
   static const _initialPosition = CameraPosition(
     target: LatLng(16.0430, 120.3333),
@@ -105,9 +114,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     try {
       final dest = LatLng(destination.lat, destination.lng);
-      final route = await RoutingService.getWalkingRoute(
+      final route = await RoutingService.getRoute(
         origin: originPos,
         destination: dest,
+        mode: _selectedMode,
       );
 
       setState(() {
@@ -163,6 +173,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
       // Stage 4: deviation check — reroute if walked off the route
       _checkAndReroute(newPos, destination);
+
+      // Stage 5: AR proximity — trigger banner when within 50 m of destination
+      if (!_arPromptShown &&
+          remaining <= AppConstants.arProximityMetres) {
+        setState(() {
+          _arPromptShown = true;
+          _showArProximityBanner = true;
+        });
+      }
     });
   }
 
@@ -192,9 +211,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     try {
       final dest = LatLng(destination.lat, destination.lng);
-      final newRoute = await RoutingService.getWalkingRoute(
+      final newRoute = await RoutingService.getRoute(
         origin: currentPos,
         destination: dest,
+        mode: _selectedMode,
       );
       if (mounted) {
         setState(() {
@@ -218,6 +238,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _routeDestination = null;
       _remainingMetres = null;
       _autoCenter = true;
+      _isRerouting = false;
+      _arPromptShown = false;
+      _showArProximityBanner = false;
     });
   }
 
@@ -307,7 +330,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   icon: BitmapDescriptor.defaultMarkerWithHue(
                     isDest ? BitmapDescriptor.hueRed : _categoryHue(l.category),
                   ),
-                  zIndex: isDest ? 1 : 0,
+                  zIndexInt: isDest ? 1 : 0,
                   onTap: () => setState(() => _selectedLandmark = l),
                 );
               }).toSet();
@@ -321,7 +344,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   icon: BitmapDescriptor.defaultMarkerWithHue(
                       BitmapDescriptor.hueAzure),
                   infoWindow: const InfoWindow(title: 'You are here'),
-                  zIndex: 2,
+                  zIndexInt: 2,
                 ));
               }
 
@@ -364,7 +387,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               right: 0,
               child: municipalitiesAsync.when(
                 loading: () => const SizedBox.shrink(),
-                error: (_, _1) => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
                 data: (result) => Container(
                   color: Colors.white.withValues(alpha: 0.93),
                   padding: const EdgeInsets.symmetric(vertical: 8),
@@ -457,6 +480,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               initialRoute: _activeRoute,
               autoCenter: _autoCenter,
               isRerouting: _isRerouting,
+              mode: _selectedMode,
               onRecenter: () {
                 setState(() => _autoCenter = true);
                 if (userPos != null && _mapController != null) {
@@ -466,6 +490,30 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 }
               },
               onStop: _stopNavigation,
+            ),
+
+          // ── Stage 5: AR Proximity Banner ─────────────────────────────────
+          if (_isNavMode && _showArProximityBanner && _routeDestination != null)
+            Positioned(
+              bottom: 90,
+              left: 12,
+              right: 12,
+              child: _ArProximityBanner(
+                destination: _routeDestination!,
+                onViewAR: () {
+                  setState(() => _showArProximityBanner = false);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ARViewScreen(
+                        landmarkId: _routeDestination!.id,
+                        landmarkName: _routeDestination!.name,
+                      ),
+                    ),
+                  );
+                },
+                onDismiss: () =>
+                    setState(() => _showArProximityBanner = false),
+              ),
             ),
 
           // ── FABs (hidden during nav — panel has recenter button) ──────────
@@ -498,6 +546,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 landmark: _selectedLandmark!,
                 isNavigating: _routeDestination?.id == _selectedLandmark!.id,
                 isCalculating: _isCalculatingRoute,
+                selectedMode: _selectedMode,
+                onModeChanged: (m) => setState(() => _selectedMode = m),
                 onClose: () => setState(() => _selectedLandmark = null),
                 onViewDetails: () =>
                     context.push('/landmarks/${_selectedLandmark!.id}'),
@@ -550,6 +600,7 @@ class _LiveNavPanel extends StatelessWidget {
   final RouteResult? initialRoute;
   final bool autoCenter;
   final bool isRerouting;
+  final TransportMode mode;
   final VoidCallback onRecenter;
   final VoidCallback onStop;
 
@@ -559,6 +610,7 @@ class _LiveNavPanel extends StatelessWidget {
     required this.initialRoute,
     required this.autoCenter,
     required this.isRerouting,
+    required this.mode,
     required this.onRecenter,
     required this.onStop,
   });
@@ -573,8 +625,8 @@ class _LiveNavPanel extends StatelessWidget {
   String get _etaLabel {
     final m = remainingMetres ?? initialRoute?.distanceMetres;
     if (m == null) return '—';
-    // Average walking speed: ~1.4 m/s = 84 m/min
-    final minutes = (m / 84).ceil();
+    // Use transport mode speed for ETA (m/s)
+    final minutes = (m / (mode.speedMetresPerSec * 60)).ceil();
     if (minutes < 60) return '$minutes min';
     final h = minutes ~/ 60;
     final min = minutes % 60;
@@ -610,7 +662,7 @@ class _LiveNavPanel extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.directions_walk, color: Colors.white, size: 26),
+                  Icon(mode.icon, color: Colors.white, size: 26),
                   const SizedBox(width: 12),
                   Expanded(
                     child: isRerouting
@@ -651,7 +703,7 @@ class _LiveNavPanel extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '$_distanceLabel  ·  $_etaLabel walk',
+                                '$_distanceLabel  ·  $_etaLabel',
                                 style: const TextStyle(
                                   color: Colors.white70,
                                   fontSize: 12,
@@ -787,6 +839,8 @@ class _LandmarkPreviewSheet extends StatelessWidget {
   final Landmark landmark;
   final bool isNavigating;
   final bool isCalculating;
+  final TransportMode selectedMode;
+  final ValueChanged<TransportMode> onModeChanged;
   final VoidCallback onClose;
   final VoidCallback onViewDetails;
   final VoidCallback onNavigate;
@@ -796,6 +850,8 @@ class _LandmarkPreviewSheet extends StatelessWidget {
     required this.landmark,
     required this.isNavigating,
     required this.isCalculating,
+    required this.selectedMode,
+    required this.onModeChanged,
     required this.onClose,
     required this.onViewDetails,
     required this.onNavigate,
@@ -886,7 +942,61 @@ class _LandmarkPreviewSheet extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            // ── Transport mode selector ─────────────────────────────────────
+            if (!isNavigating)
+              Row(
+                children: TransportMode.values.map((m) {
+                  final selected = selectedMode == m;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: GestureDetector(
+                        onTap: () => onModeChanged(m),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? AppColors.primary
+                                : AppColors.cardBg,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: selected
+                                  ? AppColors.primary
+                                  : AppColors.divider,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                m.icon,
+                                size: 20,
+                                color: selected
+                                    ? Colors.white
+                                    : AppColors.textMuted,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                m.label,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: selected
+                                      ? Colors.white
+                                      : AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -934,6 +1044,107 @@ class _LandmarkPreviewSheet extends StatelessWidget {
                           fontSize: 13, fontWeight: FontWeight.w600)),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── AR Proximity Banner (Stage 5) ─────────────────────────────────────────────
+
+class _ArProximityBanner extends StatelessWidget {
+  final Landmark destination;
+  final VoidCallback onViewAR;
+  final VoidCallback onDismiss;
+
+  const _ArProximityBanner({
+    required this.destination,
+    required this.onViewAR,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFD4A017), AppColors.secondary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.secondary.withValues(alpha: 0.4),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.view_in_ar_rounded,
+              color: AppColors.charcoal,
+              size: 34,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "You're almost there!",
+                    style: TextStyle(
+                      color: AppColors.charcoal,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    destination.name,
+                    style: const TextStyle(
+                      color: AppColors.charcoal,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: onViewAR,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.charcoal,
+                foregroundColor: AppColors.secondary,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'View AR',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: onDismiss,
+              child: const Icon(
+                Icons.close,
+                color: AppColors.charcoal,
+                size: 18,
+              ),
             ),
           ],
         ),

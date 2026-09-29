@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../core/constants.dart';
 import '../models/route_result.dart';
+import '../models/transport_mode.dart';
 
 /// Calls OpenRouteService to calculate a walking route between two points.
 ///
@@ -19,12 +20,13 @@ class RoutingService {
     },
   ));
 
-  /// Calculates a walking route from [origin] to [destination].
+  /// Calculates a route from [origin] to [destination] using [mode].
   ///
   /// Throws a [RoutingException] with a user-readable message on failure.
-  static Future<RouteResult> getWalkingRoute({
+  static Future<RouteResult> getRoute({
     required LatLng origin,
     required LatLng destination,
+    TransportMode mode = TransportMode.walking,
   }) async {
     if (AppConstants.orsApiKey == 'YOUR_ORS_API_KEY') {
       throw RoutingException(
@@ -35,7 +37,7 @@ class RoutingService {
 
     try {
       final response = await _dio.get(
-        '/v2/directions/foot-walking',
+        '/v2/directions/${mode.orsProfile}',
         queryParameters: {
           // ORS uses [longitude, latitude] order — opposite of Google Maps
           'start': '${origin.longitude},${origin.latitude}',
