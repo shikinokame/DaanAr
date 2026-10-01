@@ -14,46 +14,42 @@ This guide explains **why** errors like `Failed to listen on 0.0.0.0:8000` or `F
 - **The Error**: `PHP Fatal error: Uncaught Error: Failed opening required '.../daanar-api/index.php'`
 - **Cause**: In Laravel, `index.php` is located inside `daanar-api/public/index.php`. When running `php -S 0.0.0.0:8000 vendor/.../server.php` from the `daanar-api` root folder without specifying `-t public`, PHP looks for `daanar-api/index.php` (which does not exist).
 
-### 3. Case-Sensitivity in PHP CLI Flags (`-s` vs `-S`)
-- **The Error**: `Could not open input file: 0.0.0.0:8000`
-- **Cause**: PHP CLI switches are case-sensitive. `-s` (lowercase) tries to output syntax-highlighted source code, whereas `-S` (uppercase) starts the built-in web server.
+### 3. Missing MariaDB / MySQL Background Service
+- **The Error**: `SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it`
+- **Cause**: MariaDB/MySQL (`mysqld.exe`) was not running. Laravel requires the database to serve landmark data and authenticate users.
 
-### 4. Unquoted File Paths with Spaces in PowerShell
+### 4. Multiple PHP Installations on Machine (XAMPP vs Herd)
+- **The Error**: `Class "Pdo\Mysql" not found`
+- **Cause**: System `PATH` was invoking XAMPP's PHP 8.2 CLI which did not have `pdo_mysql` enabled, instead of Laravel Herd's PHP 8.4 (`%USERPROFILE%\.config\herd-lite\bin\php.exe`).
+
+### 5. Unquoted File Paths with Spaces in PowerShell
 - **The Error**: `Set-Location : A positional parameter cannot be found that accepts argument 'daanAr...'`
 - **Cause**: The folder name `new daanAr` contains a space. PowerShell interprets spaces as parameter separators unless the path is enclosed in quotes `"` or `'`.
 
 ---
 
-## 🛠️ Task 2: How to Solve and Never Experience It Again
+## 🛠️ Task 2: How to Solve It — 1-Click Solution
 
-### Solution 1: Recommended Way to Start the Server
-Always run `php artisan serve` from inside the `daanar-api` directory. Artisan automatically handles the `public` directory and routing for you.
+### Solution 1: Use `START_SERVER.bat` (Recommended — 100% Automated)
+Simply **double-click** `START_SERVER.bat` in the project root folder `c:\Users\Harvinjee\new daanAr`.
 
-```powershell
-# 1. Navigate into the API directory (always use quotes around paths with spaces)
-cd "c:\Users\Harvinjee\new daanAr\daanar-api"
-
-# 2. Start the server
-php artisan serve --port 8000
-```
-*To allow mobile phones on the same WiFi to connect, specify `--host 0.0.0.0`:*
-```powershell
-php artisan serve --host 0.0.0.0 --port 8000
-```
+It automatically:
+1. Starts **MariaDB/MySQL** if it's stopped.
+2. Cleans up any leftover processes holding port 8000.
+3. Automatically launches PHP using Herd's full **PHP 8.4 engine** (with both `intl` and `pdo_mysql` enabled).
+4. Connects the **ngrok tunnel** (`letdown-twiddle-thirty.ngrok-free.dev`).
+5. Updates `constants.dart` in Flutter with the live ngrok URL.
+6. Displays a live dashboard with all URLs and credentials.
+7. Shuts down everything cleanly when you press **`Q`** or close the window.
 
 ---
 
-### Solution 2: How to Clear Port 8000 (When Port is Blocked)
-If you see `Failed to listen on 0.0.0.0:8000`, run this single command in PowerShell to kill all leftover PHP background processes:
-
-```powershell
-Stop-Process -Name php -Force -ErrorAction SilentlyContinue
-```
-Then start `php artisan serve --port 8000` again.
+### Solution 2: Clean Stop (`STOP_SERVER.bat`)
+If you ever want to forcefully stop all background PHP servers or ngrok tunnels, just double-click **`STOP_SERVER.bat`**.
 
 ---
 
-### Solution 3: If Using `php -S` Directly
+### Solution 3: Manual Startup in Terminal
 If you want to use `php -S` without Artisan, you **must** change your working directory into `daanar-api\public`:
 
 ```powershell

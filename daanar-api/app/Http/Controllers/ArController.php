@@ -25,20 +25,28 @@ class ArController extends Controller
         // Demo mode: forced via query param OR no NFT files available
         $demoMode = $request->boolean('demo') || ! $hasNftMarker;
 
-        // Resolve model URL — use uploaded .glb or fall back to demo cube
+        $baseUrl = $request->getSchemeAndHttpHost();
+
+        // Resolve model URL — use uploaded .glb or null
         $modelUrl = $landmark->ar_model_url
-            ? asset('storage/' . $landmark->ar_model_url)
+            ? $baseUrl . '/storage/' . $landmark->ar_model_url
             : null;
 
-        // NFT marker base path (AR.js needs basename without extension)
+        // Hero image for poster/thumbnail
+        $heroUrl = $landmark->hero_image
+            ? $baseUrl . '/storage/' . $landmark->hero_image
+            : null;
+
+        // NFT marker base path
         $nftBasePath = $hasNftMarker
-            ? asset('ar-assets/targets/' . pathinfo($landmark->ar_marker_image, PATHINFO_FILENAME))
+            ? $baseUrl . '/ar-assets/targets/' . pathinfo($landmark->ar_marker_image, PATHINFO_FILENAME)
             : null;
 
         return view('ar.landmark', compact(
             'landmark',
             'demoMode',
             'modelUrl',
+            'heroUrl',
             'nftBasePath',
         ));
     }

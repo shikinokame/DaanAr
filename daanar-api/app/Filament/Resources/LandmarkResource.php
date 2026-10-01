@@ -94,14 +94,14 @@ class LandmarkResource extends Resource
                             ->image()
                             ->disk('public')
                             ->directory('landmarks/hero')
-                            ->maxSize(5120)
+                            ->maxSize(307200)
                             ->imageEditor(),
                         Forms\Components\FileUpload::make('ar_marker_image')
                             ->label('AR Marker Image')
                             ->image()
                             ->disk('public')
                             ->directory('landmarks/markers')
-                            ->maxSize(5120),
+                            ->maxSize(307200),
                         Forms\Components\FileUpload::make('ar_model_url')
                             ->label('AR 3D Model')
                             ->disk('public')
@@ -111,7 +111,7 @@ class LandmarkResource extends Resource
                                 'model/gltf-binary',
                                 'application/octet-stream',
                             ])
-                            ->maxSize(20480),
+                            ->maxSize(307200),
                         Forms\Components\TextInput::make('ar_html_path')
                             ->label('AR HTML Path')
                             ->maxLength(255)

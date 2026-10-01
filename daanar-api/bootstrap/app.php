@@ -16,6 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
         ]);
 
+        $middleware->trustProxies(at: '*');
+
         // Ensure API routes always return JSON for unauthenticated responses
         $middleware->statefulApi();
     })
