@@ -625,7 +625,7 @@
             <div class="landmark-card">
                 <div class="landmark-image cat-{{ $landmark->category }}">
                     @if($landmark->hero_image)
-                        <img src="{{ $landmark->hero_image }}" alt="{{ $landmark->name }}" loading="lazy">
+                        <img src="{{ asset('storage/' . $landmark->hero_image) }}" alt="{{ $landmark->name }}" loading="lazy">
                     @else
                         @switch($landmark->category)
                             @case('church')    ⛪ @break

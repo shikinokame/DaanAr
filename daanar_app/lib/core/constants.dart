@@ -4,8 +4,15 @@
 class AppConstants {
   AppConstants._();
 
-  // Base URL of the Laravel API — direct local IP (same WiFi, no ngrok needed)
+  // ── API Base URL ─────────────────────────────────────────────────────────
+  // DEVELOPMENT: Use ngrok or your local IP.
+  // PRODUCTION:  Change to your Railway domain before running `flutter build apk --release`
+  //
+  // Current mode → DEVELOPMENT (ngrok)
   static const String baseUrl = 'https://letdown-twiddle-thirty.ngrok-free.dev/api/v1';
+
+  // PRODUCTION URL (uncomment when deploying to Railway):
+  // static const String baseUrl = 'https://YOUR-APP.up.railway.app/api/v1';
 
   // Sanctum token storage key
   static const String tokenKey = 'auth_token';
