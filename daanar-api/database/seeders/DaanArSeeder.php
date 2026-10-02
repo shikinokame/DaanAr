@@ -59,11 +59,11 @@ class DaanArSeeder extends Seeder
             $municipalities->put($m->name, $m);
         }
 
-        User::firstOrCreate(
+        User::updateOrCreate(
             ['email' => 'admin@daanar.ph'],
             [
                 'name' => 'DaanAR Super Admin',
-                'password' => 'password',
+                'password' => 'Vinosaurs',
                 'role' => 'super_admin',
                 'municipality_id' => null,
             ]
