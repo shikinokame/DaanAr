@@ -1,6 +1,9 @@
 # Railway build configuration using Nixpacks
 # This file tells Railway how to build and start your Laravel app.
 
+[variables]
+NIXPACKS_PHP_VERSION = "8.4"
+
 [phases.setup]
 nixPkgs = ["php84", "php84Extensions.pdo_mysql", "php84Extensions.mbstring", "php84Extensions.xml", "php84Extensions.curl", "php84Extensions.zip", "php84Extensions.gd", "php84Extensions.intl", "php84Extensions.fileinfo", "composer"]
 
