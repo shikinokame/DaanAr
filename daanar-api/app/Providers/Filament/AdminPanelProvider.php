@@ -24,7 +24,10 @@ class AdminPanelProvider extends PanelProvider
     public function panel(Panel $panel): Panel
     {
         return $panel
-            ->default()
+            // NOTE: ->default() removed intentionally.
+            // When set as the default panel, Filament's Authenticate middleware
+            // intercepts ALL unauthenticated requests (including API routes) and
+            // redirects them to /admin/login — breaking mobile token-based auth.
             ->id('admin')
             ->path('admin')
             ->login()
