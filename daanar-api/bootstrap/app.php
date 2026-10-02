@@ -18,9 +18,15 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->trustProxies(at: '*');
 
-        // Ensure API routes always return JSON for unauthenticated responses
-        $middleware->statefulApi();
+        // Note: We use Sanctum token-based auth (Bearer tokens) for the mobile app.
+        // statefulApi() is for cookie/session-based SPAs — do NOT add it here,
+        // as it causes POST requests from mobile clients to 302-redirect.
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Return JSON 401 for unauthenticated API requests (not a redirect)
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, \Illuminate\Http\Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
+        });
     })->create();
