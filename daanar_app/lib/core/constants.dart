@@ -8,11 +8,11 @@ class AppConstants {
   // DEVELOPMENT: Use ngrok or your local IP.
   // PRODUCTION:  Change to your Railway domain before running `flutter build apk --release`
   //
-  // Current mode → DEVELOPMENT (ngrok)
-  static const String baseUrl = 'https://letdown-twiddle-thirty.ngrok-free.dev/api/v1';
+  // Current mode → PRODUCTION (Railway)
+  static const String baseUrl = 'https://daanar-production.up.railway.app/api/v1';
 
-  // PRODUCTION URL (uncomment when deploying to Railway):
-  // static const String baseUrl = 'https://YOUR-APP.up.railway.app/api/v1';
+  // DEVELOPMENT URL (ngrok):
+  // static const String baseUrl = 'https://letdown-twiddle-thirty.ngrok-free.dev/api/v1';
 
   // Sanctum token storage key
   static const String tokenKey = 'auth_token';
