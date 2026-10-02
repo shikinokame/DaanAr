@@ -65,6 +65,20 @@ Route::prefix('v1')->group(function () {
                 'files' => $files,
             ]);
         });
+
+        Route::post('reseed', function (\Illuminate\Http\Request $request) {
+            $secret = $request->header('X-Sync-Secret');
+            if ($secret !== 'daanar_sync_secret_2026' && $secret !== config('app.key')) {
+                abort(403, 'Unauthorized sync request');
+            }
+
+            \Illuminate\Support\Facades\Artisan::call('db:seed', ['--force' => true]);
+
+            return response()->json([
+                'status' => 'reseeded',
+                'output' => \Illuminate\Support\Facades\Artisan::output(),
+            ]);
+        });
     });
 });
 
