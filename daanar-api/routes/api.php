@@ -31,4 +31,40 @@ Route::prefix('v1')->group(function () {
     // Trails
     Route::get('trails',          [TrailController::class, 'index']);
     Route::get('trails/{trail}',  [TrailController::class, 'show']);
+
+    // ── Internal Media Sync (Protected) ───────────────────────────────────
+    Route::prefix('internal')->group(function () {
+        Route::post('sync-media', function (\Illuminate\Http\Request $request) {
+            $secret = $request->header('X-Sync-Secret');
+            if ($secret !== 'daanar_sync_secret_2026' && $secret !== config('app.key')) {
+                abort(403, 'Unauthorized sync request');
+            }
+
+            $path = $request->input('path');
+            if (! $path || ! $request->hasFile('file')) {
+                return response()->json(['error' => 'Missing file or path'], 400);
+            }
+
+            $file = $request->file('file');
+            $dir = dirname($path);
+            $filename = basename($path);
+
+            \Illuminate\Support\Facades\Storage::disk('public')->putFileAs($dir, $file, $filename);
+
+            return response()->json([
+                'status' => 'uploaded',
+                'path' => $path,
+                'size' => \Illuminate\Support\Facades\Storage::disk('public')->size($path),
+            ]);
+        });
+
+        Route::get('check-media', function (\Illuminate\Http\Request $request) {
+            $files = \Illuminate\Support\Facades\Storage::disk('public')->allFiles('landmarks');
+            return response()->json([
+                'count' => count($files),
+                'files' => $files,
+            ]);
+        });
+    });
 });
+

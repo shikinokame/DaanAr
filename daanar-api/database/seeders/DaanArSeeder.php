@@ -83,6 +83,8 @@ class DaanArSeeder extends Seeder
                 'address' => '28WW+827, Mayombo District, Dagupan City, Pangasinan',
                 'lat' => 16.04581200,
                 'lng' => 120.34506300,
+                'hero_image' => 'landmarks/hero/01M3SBX8Q4B1STH98NTQ9XB2S2.jpg',
+                'ar_model_url' => 'landmarks/models/01M3V1DR3QRRHX25THD630R5G1.glb',
                 'is_featured' => false,
             ],
             [
@@ -95,6 +97,8 @@ class DaanArSeeder extends Seeder
                 'address' => 'Zamora St, Downtown District, Dagupan City, Pangasinan',
                 'lat' => 16.04320000,
                 'lng' => 120.33380000,
+                'hero_image' => 'landmarks/hero/01M3TPZD7RTHQ7WVD5YQAE8BAV.jpg',
+                'ar_model_url' => 'landmarks/models/01M3V95CJWDJ047YT8SGA7HX4A.glb',
                 'is_featured' => true,
             ],
 
@@ -109,6 +113,8 @@ class DaanArSeeder extends Seeder
                 'address' => 'Milo St, Poblacion, Manaoag, Pangasinan',
                 'lat' => 16.04420000,
                 'lng' => 120.48610000,
+                'hero_image' => 'landmarks/hero/01M3TQRD2ECX7XTJXP638W8X37.png',
+                'ar_model_url' => 'landmarks/models/01M3W1QQVGZRDS724GGNRDNA1G.glb',
                 'is_featured' => true,
             ],
             [
@@ -121,6 +127,22 @@ class DaanArSeeder extends Seeder
                 'address' => 'Binday-Manaoag Access Road, Manaoag, Pangasinan',
                 'lat' => 16.07120000,
                 'lng' => 120.46850000,
+                'hero_image' => null,
+                'ar_model_url' => null,
+                'is_featured' => false,
+            ],
+            [
+                'municipality' => 'Manaoag',
+                'name' => 'Historic Town Plaza and Street Grid',
+                'description' => 'Centered around the Minor Basilica of Our Lady of the Rosary, the Historic Town Plaza and Street Grid represents the cultural, spiritual, and civic core of Manaoag, Pangasinan. The radial street system branches directly out from the central church square to facilitate pilgrimage processions, showcasing a legacy of early Spanish urban planning that survived through subsequent historical eras.',
+                'short_description' => 'The physical layout and historical heart of Manaoag, established during the Spanish colonial period and evolving through the Philippine-American War era.',
+                'category' => 'park',
+                'era' => 'Philippine-American War',
+                'address' => 'Poblacion, Manaoag, Pangasinan 2430',
+                'lat' => 16.04390000,
+                'lng' => 120.48610000,
+                'hero_image' => 'landmarks/hero/01M3V0WDNJ8KKVPCAW731CW1GK.png',
+                'ar_model_url' => null,
                 'is_featured' => false,
             ],
 
@@ -135,6 +157,8 @@ class DaanArSeeder extends Seeder
                 'address' => '3CC5+J26, Rizal Ave, Poblacion, Mangaldan, 2432 Pangasinan',
                 'lat' => 16.07156200,
                 'lng' => 120.40756200,
+                'hero_image' => 'landmarks/hero/01M3TRZ9GQYDDSBFJW7JK8QKD0.png',
+                'ar_model_url' => 'landmarks/models/01M3W5A4N3MS5H46YRNDJBR324.glb',
                 'is_featured' => true,
             ],
             [
@@ -147,6 +171,8 @@ class DaanArSeeder extends Seeder
                 'address' => '3CG2+W3, Poblacion, Mangaldan, Pangasinan',
                 'lat' => 16.07731300,
                 'lng' => 120.40018800,
+                'hero_image' => 'landmarks/hero/01M3TS45VJZ32Y3KMF6DJGWFSG.png',
+                'ar_model_url' => 'landmarks/models/01M3W89Y2WAQSZJMPZEFEQSCZB.glb',
                 'is_featured' => false,
             ],
 
@@ -161,6 +187,8 @@ class DaanArSeeder extends Seeder
                 'address' => 'National Highway, San Jacinto, Pangasinan (16.09256° N, 120.43202° E)',
                 'lat' => 16.09256000,
                 'lng' => 120.43202000,
+                'hero_image' => 'landmarks/hero/01M3R00X28C18MFY5BBSNKAJQ6.jpg',
+                'ar_model_url' => 'landmarks/models/01M3R00X2DQCWJJNBWB6KKT984.glb',
                 'is_featured' => false,
             ],
             [
@@ -173,6 +201,8 @@ class DaanArSeeder extends Seeder
                 'address' => '3CFP+FW8, Poblacion, San Jacinto, Pangasinan',
                 'lat' => 16.07368700,
                 'lng' => 120.43731300,
+                'hero_image' => 'landmarks/hero/01M3TTBAVN6N2QMN953AD5YBT3.png',
+                'ar_model_url' => 'landmarks/models/01M3VY05M15WQGJVXYFV07Z1RW.glb',
                 'is_featured' => true,
             ],
 
@@ -187,6 +217,8 @@ class DaanArSeeder extends Seeder
                 'address' => '49CX+WVJ, Nibaliw Center / Braganza St, Poblacion, San Fabian, 2433 Pangasinan',
                 'lat' => 16.12231200,
                 'lng' => 120.39968800,
+                'hero_image' => 'landmarks/hero/01M3TVXBPQG4E2CHJWB4N32QP3.png',
+                'ar_model_url' => 'landmarks/models/01M3WF2YSJCQCDZMSVAKBGBQJY.glb',
                 'is_featured' => true,
             ],
             [
@@ -199,23 +231,24 @@ class DaanArSeeder extends Seeder
                 'address' => '4CC4+99H, Poblacion, San Fabian, Pangasinan',
                 'lat' => 16.12093700,
                 'lng' => 120.40593700,
+                'hero_image' => 'landmarks/hero/01M3TW6RJ83KPEJRB31Z6GB5VV.png',
+                'ar_model_url' => 'landmarks/models/01M3WGHD4YFVX2EHF8ZX5WXY0M.glb',
                 'is_featured' => false,
             ],
         ];
 
-        // Disable foreign key checks, wipe existing landmarks cleanly, and reseed
-        Schema::disableForeignKeyConstraints();
-        Landmark::truncate();
-        Schema::enableForeignKeyConstraints();
-
+        // Safely update or create landmarks without wiping existing entries
         foreach ($landmarks as $landmark) {
             $municipalityName = $landmark['municipality'];
             unset($landmark['municipality']);
 
-            Landmark::create([
-                ...$landmark,
-                'municipality_id' => $municipalities[$municipalityName]->id,
-            ]);
+            Landmark::updateOrCreate(
+                ['name' => $landmark['name']],
+                [
+                    ...$landmark,
+                    'municipality_id' => $municipalities[$municipalityName]->id,
+                ]
+            );
         }
     }
 }
