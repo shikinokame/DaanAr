@@ -3,12 +3,13 @@
 
 [variables]
 NIXPACKS_PHP_VERSION = "8.4"
+NIXPACKS_PHP_EXTENSIONS = "pdo_mysql,mbstring,xml,curl,zip,gd,intl,fileinfo,bcmath"
 
 [phases.setup]
 nixPkgs = ["php84", "php84Extensions.pdo_mysql", "php84Extensions.mbstring", "php84Extensions.xml", "php84Extensions.curl", "php84Extensions.zip", "php84Extensions.gd", "php84Extensions.intl", "php84Extensions.fileinfo", "composer"]
 
 [phases.install]
-cmds = ["composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-req=ext-intl"]
+cmds = ["composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs"]
 
 [phases.build]
 cmds = [
