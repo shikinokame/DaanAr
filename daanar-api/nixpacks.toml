@@ -13,11 +13,8 @@ cmds = ["composer install --no-dev --optimize-autoloader --no-interaction --igno
 
 [phases.build]
 cmds = [
-    "php artisan config:cache",
-    "php artisan route:cache",
-    "php artisan view:cache",
     "php artisan storage:link",
 ]
 
 [start]
-cmd = "php artisan migrate --force && php artisan db:seed --force && php -S 0.0.0.0:$PORT -t public public/server.php"
+cmd = "php artisan config:clear && php artisan migrate --force && php artisan db:seed --force && php -S 0.0.0.0:$PORT -t public public/server.php"
