@@ -94,8 +94,7 @@ class LandmarkResource extends Resource
                             ->image()
                             ->disk('public')
                             ->directory('landmarks/hero')
-                            ->maxSize(307200)
-                            ->imageEditor(),
+                            ->maxSize(307200),
                         Forms\Components\FileUpload::make('ar_marker_image')
                             ->label('AR Marker Image')
                             ->image()
