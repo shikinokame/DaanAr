@@ -59,7 +59,9 @@ class DaanArSeeder extends Seeder
             $municipalities->put($m->name, $m);
         }
 
-        User::updateOrCreate(
+        // Use firstOrCreate — NOT updateOrCreate — so the password is hashed ONCE.
+        // updateOrCreate re-hashes on every `db:seed --force`, breaking login.
+        User::firstOrCreate(
             ['email' => 'admin@daanar.ph'],
             [
                 'name' => 'DaanAR Super Admin',
