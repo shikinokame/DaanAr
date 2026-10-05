@@ -108,5 +108,74 @@ Route::get('/debug/db-check', function () {
     return response()->json($results, 200, [], JSON_PRETTY_PRINT);
 });
 
+// TEMP: render Filament pages with debug=true to see the real exception
+Route::get('/debug/render-test', function () {
+    $secret = request('secret');
+    if ($secret !== 'daanar2024debug') {
+        abort(403);
+    }
+
+    // Temporarily enable debug mode so exceptions are not swallowed
+    config(['app.debug' => true]);
+
+    // Authenticate as admin
+    $user = \App\Models\User::where('email', 'admin@daanar.ph')->first();
+    if (!$user) {
+        return response()->json(['error' => 'Admin user not found'], 500);
+    }
+    \Illuminate\Support\Facades\Auth::login($user);
+
+    $results = [];
+
+    // Try each admin page
+    $pages = [
+        'municipalities' => '/admin/municipalities',
+        'landmarks'      => '/admin/landmarks',
+        'users'          => '/admin/users',
+        'trails'         => '/admin/trails',
+        'dashboard'      => '/admin',
+    ];
+
+    foreach ($pages as $name => $path) {
+        try {
+            $request = \Illuminate\Http\Request::create($path, 'GET');
+            $request->setUserResolver(fn () => $user);
+            $response = app()->handle($request);
+            $results[$name] = [
+                'status' => $response->getStatusCode(),
+                'ok'     => $response->getStatusCode() < 400,
+            ];
+            if ($response->getStatusCode() >= 400) {
+                $content = $response->getContent();
+                // Try to extract error message from HTML
+                if (preg_match('/<title>(.*?)<\/title>/s', $content, $m)) {
+                    $results[$name]['title'] = trim(strip_tags($m[1]));
+                }
+                // If debug mode produces a Whoops/Ignition page, extract the message
+                if (preg_match('/class="exception_message"[^>]*>(.*?)<\//s', $content, $m)) {
+                    $results[$name]['exception_message'] = trim(strip_tags($m[1]));
+                }
+                if (preg_match('/class="exception_title"[^>]*>(.*?)<\//s', $content, $m)) {
+                    $results[$name]['exception_class'] = trim(strip_tags($m[1]));
+                }
+                // Fallback: grab first 500 chars of body for clues
+                $bodyText = strip_tags($content);
+                $bodyText = preg_replace('/\s+/', ' ', $bodyText);
+                $results[$name]['body_preview'] = substr(trim($bodyText), 0, 800);
+            }
+        } catch (\Throwable $e) {
+            $results[$name] = [
+                'error'   => $e->getMessage(),
+                'class'   => get_class($e),
+                'file'    => $e->getFile() . ':' . $e->getLine(),
+                'trace'   => array_slice(explode("\n", $e->getTraceAsString()), 0, 15),
+            ];
+        }
+    }
+
+    \Illuminate\Support\Facades\Auth::logout();
+
+    return response()->json($results, 200, [], JSON_PRETTY_PRINT);
+});
 
 
