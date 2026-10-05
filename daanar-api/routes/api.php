@@ -23,6 +23,27 @@ Route::prefix('v1')->group(function () {
         Route::get('featured', [LandmarkController::class, 'featured']);
         Route::get('/',        [LandmarkController::class, 'index']);
         Route::get('{landmark}', [LandmarkController::class, 'show']);
+
+        // Log a visit — called by Flutter when user opens a landmark detail/AR view
+        Route::post('{landmark}/visit', function (
+            \Illuminate\Http\Request $request,
+            \App\Models\Landmark $landmark
+        ) {
+            $request->validate([
+                'device_id' => 'nullable|string|max:64',
+                'source'    => 'nullable|string|max:32',
+            ]);
+
+            \App\Models\LandmarkVisit::create([
+                'landmark_id' => $landmark->id,
+                'user_id'     => $request->user()?->id,
+                'device_id'   => $request->input('device_id'),
+                'source'      => $request->input('source', 'app'),
+                'visited_at'  => now(),
+            ]);
+
+            return response()->json(['status' => 'recorded'], 201);
+        });
     });
 
     // Municipalities

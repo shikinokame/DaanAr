@@ -45,4 +45,9 @@ class Landmark extends Model
             ->withPivot('order')
             ->orderByPivot('order');
     }
+
+    public function visits(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(LandmarkVisit::class);
+    }
 }
