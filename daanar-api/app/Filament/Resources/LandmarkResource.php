@@ -91,15 +91,15 @@ class LandmarkResource extends Resource
                     ->schema([
                         Forms\Components\FileUpload::make('hero_image')
                             ->label('Hero Image')
-                            ->image()
                             ->disk('public')
                             ->directory('landmarks/hero')
+                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
                             ->maxSize(307200),
                         Forms\Components\FileUpload::make('ar_marker_image')
                             ->label('AR Marker Image')
-                            ->image()
                             ->disk('public')
                             ->directory('landmarks/markers')
+                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
                             ->maxSize(307200),
                         Forms\Components\FileUpload::make('ar_model_url')
                             ->label('AR 3D Model')
@@ -127,9 +127,10 @@ class LandmarkResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\ImageColumn::make('hero_image')
-                    ->disk('public')
-                    ->circular(),
+                Tables\Columns\TextColumn::make('hero_image')
+                    ->label('Image')
+                    ->formatStateUsing(fn (?string $state): string => $state ? '📷 ' . basename($state) : '—')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
                     ->sortable(),

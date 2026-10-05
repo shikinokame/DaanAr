@@ -6,7 +6,19 @@ NIXPACKS_PHP_VERSION = "8.4"
 NIXPACKS_PHP_EXTENSIONS = "pdo_mysql,mbstring,xml,curl,zip,gd,intl,fileinfo,bcmath"
 
 [phases.setup]
-nixPkgs = ["php84", "php84Extensions.pdo_mysql", "php84Extensions.mbstring", "php84Extensions.xml", "php84Extensions.curl", "php84Extensions.zip", "php84Extensions.gd", "php84Extensions.intl", "php84Extensions.fileinfo", "composer"]
+nixPkgs = [
+    "php84",
+    "php84Extensions.pdo_mysql",
+    "php84Extensions.mbstring",
+    "php84Extensions.xml",
+    "php84Extensions.curl",
+    "php84Extensions.zip",
+    "php84Extensions.gd",
+    "php84Extensions.intl",
+    "php84Extensions.fileinfo",
+    "php84Extensions.bcmath",
+    "composer"
+]
 
 [phases.install]
 cmds = ["composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs"]
@@ -17,4 +29,4 @@ cmds = [
 ]
 
 [start]
-cmd = "php artisan route:clear ; php artisan config:clear ; php artisan view:clear ; php artisan migrate --force ; php artisan db:seed --force ; php artisan admin:reset-password ; php artisan storage:link ; php -d upload_max_filesize=350M -d post_max_size=350M -d memory_limit=1024M -d max_execution_time=600 artisan serve --host 0.0.0.0 --port 8080"
+cmd = "php artisan route:clear ; php artisan config:clear ; php artisan view:clear ; php artisan migrate --force ; php artisan db:seed --force ; php artisan admin:reset-password ; php artisan storage:link ; php -d extension=gd -d extension=intl -d extension=bcmath -d extension=zip -d upload_max_filesize=350M -d post_max_size=350M -d memory_limit=1024M -d max_execution_time=600 artisan serve --host 0.0.0.0 --port 8080"
