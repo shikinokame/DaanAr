@@ -37,12 +37,18 @@ class MunicipalityResource extends Resource
                             ->label('Latitude')
                             ->required()
                             ->numeric()
-                            ->step(0.00000001),
+                            ->minValue(-90)
+                            ->maxValue(90)
+                            ->step(0.00000001)
+                            ->helperText('e.g. 16.0430'),
                         Forms\Components\TextInput::make('lng')
                             ->label('Longitude')
                             ->required()
                             ->numeric()
-                            ->step(0.00000001),
+                            ->minValue(-180)
+                            ->maxValue(180)
+                            ->step(0.00000001)
+                            ->helperText('e.g. 120.3333'),
                         Forms\Components\Textarea::make('description')
                             ->rows(4)
                             ->columnSpanFull(),
