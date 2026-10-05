@@ -52,7 +52,7 @@ class UserResource extends Resource
                         Forms\Components\Select::make('role')
                             ->options([
                                 'super_admin' => 'Super Admin',
-                                'lgu_editor' => 'LGU Editor',
+                                'officer'     => 'LGU Officer',
                             ])
                             ->required()
                             ->native(false)
@@ -62,8 +62,8 @@ class UserResource extends Resource
                             ->relationship('municipality', 'name')
                             ->searchable()
                             ->preload()
-                            ->visible(fn (Get $get): bool => $get('role') === 'lgu_editor')
-                            ->required(fn (Get $get): bool => $get('role') === 'lgu_editor'),
+                            ->visible(fn (Get $get): bool => $get('role') === 'officer')
+                            ->required(fn (Get $get): bool => $get('role') === 'officer'),
                     ])
                     ->columns(2),
             ]);
@@ -83,13 +83,13 @@ class UserResource extends Resource
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'super_admin' => 'Super Admin',
-                        'lgu_editor' => 'LGU Editor',
-                        default => ucfirst($state),
+                        'officer'     => 'LGU Officer',
+                        default       => ucfirst($state),
                     })
                     ->color(fn (string $state): string => match ($state) {
                         'super_admin' => 'success',
-                        'lgu_editor' => 'info',
-                        default => 'gray',
+                        'officer'     => 'info',
+                        default       => 'gray',
                     })
                     ->sortable(),
                 Tables\Columns\TextColumn::make('municipality.name')
@@ -105,7 +105,7 @@ class UserResource extends Resource
                 Tables\Filters\SelectFilter::make('role')
                     ->options([
                         'super_admin' => 'Super Admin',
-                        'lgu_editor' => 'LGU Editor',
+                        'officer'     => 'LGU Officer',
                     ]),
             ])
             ->actions([
