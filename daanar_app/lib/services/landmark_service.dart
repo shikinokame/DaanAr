@@ -94,4 +94,15 @@ class LandmarkService {
       rethrow;
     }
   }
+
+  /// POST /api/v1/landmarks/{id}/visit
+  /// Fire-and-forget — logs an AR view for the Reports page.
+  /// Errors are silently swallowed so a network issue never blocks the AR launch.
+  Future<void> logVisit(int landmarkId) async {
+    try {
+      await _dio.post('/landmarks/$landmarkId/visit');
+    } catch (_) {
+      // Non-critical — ignore failures silently
+    }
+  }
 }

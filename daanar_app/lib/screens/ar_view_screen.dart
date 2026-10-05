@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
 import '../core/theme.dart';
+import '../services/landmark_service.dart';
 
 /// Launches the WebAR experience in the device's native Chrome browser,
 /// which properly handles getUserMedia (camera) permissions.
-class ARViewScreen extends StatefulWidget {
+class ARViewScreen extends ConsumerStatefulWidget {
   final int landmarkId;
   final String landmarkName;
 
@@ -17,10 +19,10 @@ class ARViewScreen extends StatefulWidget {
   });
 
   @override
-  State<ARViewScreen> createState() => _ARViewScreenState();
+  ConsumerState<ARViewScreen> createState() => _ARViewScreenState();
 }
 
-class _ARViewScreenState extends State<ARViewScreen> {
+class _ARViewScreenState extends ConsumerState<ARViewScreen> {
   bool _launching = false;
   bool _permissionDenied = false;
 
@@ -44,6 +46,9 @@ class _ARViewScreenState extends State<ARViewScreen> {
 
   Future<void> _launchAR() async {
     setState(() => _launching = true);
+
+    // Log the AR visit (fire-and-forget — never blocks the launch)
+    ref.read(landmarkServiceProvider).logVisit(widget.landmarkId);
 
     // Derive the server base (strip /api/v1 if present)
     final serverBase = AppConstants.baseUrl
