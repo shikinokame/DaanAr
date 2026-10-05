@@ -477,32 +477,74 @@
     const hintPill = document.querySelector('#hint-pill');
 
     if (viewer) {
-      // Progress tracking for large 3D models (e.g. 32MB)
+      let loadHandled = false;
+
+      // Helper: hide overlay once WebGL has actually rendered the first frame
+      function revealModel() {
+        if (loadHandled) return;
+        loadHandled = true;
+
+        // Wait for the next two animation frames so WebGL finishes compositing
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (loadingOverlay) loadingOverlay.classList.add('hidden');
+            if (hintPill) {
+              setTimeout(() => { hintPill.style.opacity = '0'; }, 3500);
+            }
+          });
+        });
+      }
+
+      // Progress tracking for large 3D models
       viewer.addEventListener('progress', (event) => {
         const percent = Math.round(event.detail.totalProgress * 100);
         if (progressFill) progressFill.style.width = Math.max(percent, 8) + '%';
         if (loadingStatus) loadingStatus.innerText = `Downloading 3D model... (${percent}%)`;
       });
 
-      // Model finished loading & parsing
+      // 'load' fires when the model is parsed — wait for first rendered frame
       viewer.addEventListener('load', () => {
-        console.log('3D Model loaded successfully');
-        if (loadingOverlay) loadingOverlay.classList.add('hidden');
-        if (hintPill) {
-          setTimeout(() => {
-            hintPill.style.opacity = '0';
-          }, 3500);
-        }
+        console.log('3D Model parsed — waiting for first render frame');
+        revealModel();
+      });
+
+      // 'model-visibility' is an extra signal some model-viewer versions emit
+      viewer.addEventListener('model-visibility', (e) => {
+        if (e.detail.visible) revealModel();
       });
 
       // Error handling
       viewer.addEventListener('error', (err) => {
         console.error('3D Model Error:', err);
+        loadHandled = true; // stop the timeout from overwriting the error
         if (loadingStatus) {
-          loadingStatus.innerText = 'Unable to load 3D file. Please check model format.';
+          loadingStatus.innerText = '⚠️ Failed to load 3D model.';
           loadingStatus.style.color = '#ff6b6b';
         }
+        if (progressFill) progressFill.style.background = '#ff6b6b';
+        // Show a retry button
+        const retryBtn = document.createElement('button');
+        retryBtn.innerText = '↺  Retry';
+        retryBtn.style.cssText = 'margin-top:20px;padding:10px 28px;border-radius:24px;border:none;background:#D4A853;color:#0b1812;font-weight:700;font-size:14px;cursor:pointer;';
+        retryBtn.onclick = () => location.reload();
+        if (loadingOverlay) loadingOverlay.appendChild(retryBtn);
       });
+
+      // 45-second hard timeout — if model never fires 'load' or 'error', show a friendly message
+      setTimeout(() => {
+        if (!loadHandled) {
+          loadHandled = true;
+          if (loadingStatus) {
+            loadingStatus.innerText = '⚠️ Model is taking too long. The file may be too large or unsupported.';
+            loadingStatus.style.color = '#ffbb55';
+          }
+          const retryBtn = document.createElement('button');
+          retryBtn.innerText = '↺  Retry';
+          retryBtn.style.cssText = 'margin-top:20px;padding:10px 28px;border-radius:24px;border:none;background:#D4A853;color:#0b1812;font-weight:700;font-size:14px;cursor:pointer;';
+          retryBtn.onclick = () => location.reload();
+          if (loadingOverlay) loadingOverlay.appendChild(retryBtn);
+        }
+      }, 45000);
     }
 
     // Toggle Auto-rotation
