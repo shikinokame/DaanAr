@@ -1,0 +1,13 @@
+vendor/
+node_modules/
+.env
+.env.backup
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+.git/
+tests/
+phpunit.xml
+.phpunit.result.cache
+sync-media-to-railway.ps1
