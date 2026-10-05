@@ -72,6 +72,39 @@ Route::get('/debug/db-check', function () {
     $results['php_version'] = PHP_VERSION;
     $results['loaded_extensions'] = get_loaded_extensions();
 
+    // Try to instantiate Filament Municipality resource and catch any error
+    try {
+        $resource = new \App\Filament\Resources\MunicipalityResource();
+        $table = \App\Models\Municipality::query()->withCount('landmarks')->get();
+        $results['municipality_resource_ok'] = true;
+        $results['municipality_sample'] = $table->take(2)->toArray();
+    } catch (\Throwable $e) {
+        $results['municipality_resource_error'] = $e->getMessage();
+        $results['municipality_resource_class'] = get_class($e);
+        $results['municipality_resource_file'] = $e->getFile() . ':' . $e->getLine();
+        $results['municipality_resource_trace'] = array_slice(explode("\n", $e->getTraceAsString()), 0, 10);
+    }
+
+    // Try to instantiate Filament Landmark resource and catch any error
+    try {
+        $resource = new \App\Filament\Resources\LandmarkResource();
+        $table = \App\Models\Landmark::with('municipality')->latest()->get();
+        $results['landmark_resource_ok'] = true;
+        $results['landmark_sample'] = $table->take(2)->map(fn($l) => ['id' => $l->id, 'name' => $l->name])->toArray();
+    } catch (\Throwable $e) {
+        $results['landmark_resource_error'] = $e->getMessage();
+        $results['landmark_resource_class'] = get_class($e);
+        $results['landmark_resource_file'] = $e->getFile() . ':' . $e->getLine();
+        $results['landmark_resource_trace'] = array_slice(explode("\n", $e->getTraceAsString()), 0, 10);
+    }
+
+    // Check landmarks table schema
+    try {
+        $results['landmark_cols'] = DB::select("SHOW COLUMNS FROM landmarks");
+    } catch (\Throwable $e) {
+        $results['landmark_cols_error'] = $e->getMessage();
+    }
+
     return response()->json($results, 200, [], JSON_PRETTY_PRINT);
 });
 
