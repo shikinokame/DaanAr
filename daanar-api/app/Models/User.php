@@ -76,23 +76,23 @@ class User extends Authenticatable implements FilamentUser
 
     public function isAdmin(): bool
     {
-        return $this->role === 'admin';
+        return in_array($this->role, ['super_admin', 'admin', 'officer'], true);
     }
 
     public function isSuperAdmin(): bool
     {
-        return $this->role === 'super_admin';
+        return in_array($this->role, ['super_admin', 'admin', 'officer'], true);
     }
 
     public function isOfficer(): bool
     {
-        return $this->role === 'officer';
+        return false;
     }
 
     /** Alias kept for Filament resource/widget compatibility */
     public function isLguEditor(): bool
     {
-        return $this->role === 'officer';
+        return false;
     }
 
     /**

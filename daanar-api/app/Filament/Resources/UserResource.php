@@ -27,9 +27,7 @@ class UserResource extends Resource
 
     public static function canAccess(): bool
     {
-        $user = Auth::user();
-
-        return ($user?->isSuperAdmin() || $user?->isAdmin()) ?? false;
+        return Auth::user()?->isSuperAdmin() ?? false;
     }
 
     public static function getEloquentQuery(): Builder
@@ -74,15 +72,17 @@ class UserResource extends Resource
                                 'Tourist'     => 'Tourist (Mobile)',
                                 'Student'     => 'Student (Mobile)',
                                 'Educator'    => 'Educator (Mobile)',
-                                'officer'     => 'LGU Officer (CMS)',
-                                'super_admin' => 'Super Admin (CMS)',
+                                'super_admin' => 'Admin (CMS)',
                             ])
+                            ->formatStateUsing(fn (?string $state): ?string => in_array($state, ['officer', 'admin'], true) ? 'super_admin' : $state)
                             ->required()
                             ->native(false)
                             ->live()
                             ->afterStateUpdated(function (?string $state, Forms\Set $set) {
                                 if (in_array($state, ['Tourist', 'Student', 'Educator'], true)) {
                                     $set('user_role', $state);
+                                } else {
+                                    $set('user_role', null);
                                 }
                             }),
                         Forms\Components\Select::make('status')
@@ -94,13 +94,6 @@ class UserResource extends Resource
                             ->default('Active')
                             ->required()
                             ->native(false),
-                        Forms\Components\Select::make('municipality_id')
-                            ->label('Assigned Municipality')
-                            ->relationship('municipality', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->visible(fn (Get $get): bool => $get('role') === 'officer')
-                            ->required(fn (Get $get): bool => $get('role') === 'officer'),
                     ])
                     ->columns(2),
             ]);
@@ -131,21 +124,18 @@ class UserResource extends Resource
                     ->badge()
                     ->state(fn (User $record): string => $record->user_role ?: $record->role ?: 'Tourist')
                     ->formatStateUsing(fn (string $state): string => match (strtolower($state)) {
-                        'super_admin' => 'Super Admin',
-                        'admin'       => 'Admin',
-                        'officer'     => 'LGU Officer',
-                        'tourist'     => 'Tourist',
-                        'student'     => 'Student',
-                        'educator'    => 'Educator',
-                        default       => ucfirst($state),
+                        'super_admin', 'admin', 'officer' => 'Admin (CMS)',
+                        'tourist'                         => 'Tourist',
+                        'student'                         => 'Student',
+                        'educator'                        => 'Educator',
+                        default                           => ucfirst($state),
                     })
                     ->color(fn (string $state): string => match (strtolower($state)) {
-                        'super_admin', 'admin' => 'danger',
-                        'officer'              => 'info',
-                        'tourist'              => 'success',
-                        'student'              => 'warning',
-                        'educator'             => 'primary',
-                        default                => 'gray',
+                        'super_admin', 'admin', 'officer' => 'danger',
+                        'tourist'                         => 'success',
+                        'student'                         => 'warning',
+                        'educator'                        => 'primary',
+                        default                           => 'gray',
                     })
                     ->sortable(),
 
@@ -200,8 +190,7 @@ class UserResource extends Resource
                         'Tourist'     => 'Tourist',
                         'Student'     => 'Student',
                         'Educator'    => 'Educator',
-                        'officer'     => 'LGU Officer',
-                        'super_admin' => 'Super Admin',
+                        'super_admin' => 'Admin (CMS)',
                     ]),
                 Tables\Filters\SelectFilter::make('status')
                     ->options([
