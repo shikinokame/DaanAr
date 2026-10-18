@@ -86,6 +86,13 @@ if (-not $phpExe) {
 }
 Write-Host " [OK] $($phpExe)" -ForegroundColor Green
 
+# ── 3b. Run Pending Database Migrations Automatically ────────────────────────
+if ($dbConn) {
+    Write-Host "  [3b/5] Running database migrations..." -ForegroundColor Yellow -NoNewline
+    & $phpExe (Join-Path $apiDir "artisan") migrate --force *> $null
+    Write-Host " [OK]" -ForegroundColor Green
+}
+
 # ── 4. Start PHP Server ──────────────────────────────────────────────────────
 Write-Host "  [4/5] Starting Laravel API server..." -ForegroundColor Yellow -NoNewline
 $phpProcess = Start-Process -FilePath $phpExe `

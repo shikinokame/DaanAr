@@ -7,8 +7,8 @@ use App\Http\Requests\Api\LoginRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -27,6 +27,12 @@ class AuthController extends Controller
             ]);
         }
 
+        if (strtolower((string) $user->status) === 'blocked') {
+            return response()->json([
+                'message' => 'Your account has been blocked by an administrator.',
+            ], 403);
+        }
+
         // Revoke all previous tokens to enforce single-session
         $user->tokens()->delete();
 
@@ -37,10 +43,88 @@ class AuthController extends Controller
                 'token' => $token,
                 'token_type' => 'Bearer',
                 'user' => [
-                    'id'    => $user->id,
-                    'name'  => $user->name,
-                    'email' => $user->email,
-                    'role'  => $user->role,
+                    'id'           => $user->id,
+                    'user_id'      => $user->id,
+                    'name'         => $user->name,
+                    'email'        => $user->email,
+                    'phone_number' => $user->phone_number,
+                    'role'         => $user->role,
+                    'user_role'    => $user->user_role ?? $user->role,
+                    'status'       => $user->status ?? 'Active',
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/v1/auth/register-mobile
+     * Registers or retrieves a mobile app user by Philippine mobile number & role.
+     */
+    public function registerMobile(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'phone_number' => ['required', 'string', 'max:32'],
+            'user_role'    => ['required', 'string', 'in:Tourist,Student,Educator,tourist,student,educator'],
+            'name'         => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $normalizedPhone = User::normalizePhoneNumber($validated['phone_number']);
+
+        // Validate normalized Philippine mobile format (+639XXXXXXXXX)
+        if (! preg_match('/^\+639\d{9}$/', $normalizedPhone)) {
+            throw ValidationException::withMessages([
+                'phone_number' => ['Please enter a valid Philippine mobile number (e.g., 09171234567 or +639171234567).'],
+            ]);
+        }
+
+        $roleNormalized = ucfirst(strtolower($validated['user_role']));
+
+        $user = User::where('phone_number', $normalizedPhone)->first();
+
+        if ($user) {
+            if (strtolower((string) $user->status) === 'blocked') {
+                return response()->json([
+                    'message' => 'This mobile number has been blocked by an administrator.',
+                ], 403);
+            }
+
+            // Update role if user changed it
+            $user->user_role = $roleNormalized;
+            if (! in_array($user->role, ['super_admin', 'admin', 'officer'], true)) {
+                $user->role = $roleNormalized;
+            }
+            if (! empty($validated['name'])) {
+                $user->name = $validated['name'];
+            }
+            $user->save();
+        } else {
+            $maskedLabel = User::maskPhone($normalizedPhone);
+            $user = User::create([
+                'name'         => $validated['name'] ?? "$roleNormalized ($maskedLabel)",
+                'email'        => null,
+                'phone_number' => $normalizedPhone,
+                'password'     => Hash::make(Str::random(32)),
+                'role'         => $roleNormalized,
+                'user_role'    => $roleNormalized,
+                'status'       => 'Active',
+            ]);
+        }
+
+        $token = $user->createToken('mobile-token')->plainTextToken;
+
+        return response()->json([
+            'data' => [
+                'token'      => $token,
+                'token_type' => 'Bearer',
+                'user_id'    => $user->id,
+                'user'       => [
+                    'id'           => $user->id,
+                    'user_id'      => $user->id,
+                    'name'         => $user->name,
+                    'phone_number' => $user->phone_number,
+                    'masked_phone' => User::maskPhone($user->phone_number),
+                    'user_role'    => $user->user_role ?? $user->role,
+                    'status'       => $user->status ?? 'Active',
                 ],
             ],
         ]);
@@ -52,7 +136,7 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $request->user()?->currentAccessToken()?->delete();
 
         return response()->json([
             'data' => ['message' => 'Logged out successfully.'],

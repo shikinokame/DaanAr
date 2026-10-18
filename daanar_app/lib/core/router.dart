@@ -1,6 +1,6 @@
-
 import 'package:go_router/go_router.dart';
 import '../screens/splash_screen.dart';
+import '../screens/mobile_registration_screen.dart';
 import '../screens/shell_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/trails_screen.dart';
@@ -13,6 +13,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/splash',
       builder: (context, state) => const SplashScreen(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (context, state) => const MobileRegistrationScreen(),
     ),
 
     // Shell with bottom nav (Home | Trails | Map)

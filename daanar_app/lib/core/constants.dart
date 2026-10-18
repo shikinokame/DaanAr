@@ -14,8 +14,18 @@ class AppConstants {
   // DEVELOPMENT URL (ngrok):
   // static const String baseUrl = 'https://letdown-twiddle-thirty.ngrok-free.dev/api/v1';
 
-  // Sanctum token storage key
+  // Sanctum token & mobile user storage keys
   static const String tokenKey = 'auth_token';
+  static const String userIdKey = 'auth_user_id';
+  static const String phoneNumberKey = 'auth_phone_number';
+  static const String userRoleKey = 'auth_user_role';
+
+  // Available mobile visitor roles
+  static const List<String> userRoles = [
+    'Tourist',
+    'Student',
+    'Educator',
+  ];
 
   // Pagination
   static const int defaultPageSize = 15;
@@ -35,7 +45,8 @@ class AppConstants {
   static const String orsApiKey = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjI1YjMyNTA2MWI1NTRiMjE5MTAwZTU3ZDU4MmE4NDA1IiwiaCI6Im11cm11cjY0In0=';
   static const String orsBaseUrl = 'https://api.openrouteservice.org';
 
-  // Navigation thresholds
-  static const double arProximityMetres = 50.0;  // trigger AR within 50m
-  static const double rerouteThresholdMetres = 30.0; // reroute if > 30m off route
+  // Navigation & Geofence thresholds
+  static const double physicalVisitRadiusMetres = 100.0; // On-site geofence radius (100m)
+  static const double arProximityMetres = 50.0;          // trigger AR prompt within 50m
+  static const double rerouteThresholdMetres = 30.0;     // reroute if > 30m off route
 }

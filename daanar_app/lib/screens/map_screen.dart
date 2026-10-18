@@ -12,6 +12,7 @@ import '../models/transport_mode.dart';
 import '../providers/landmark_providers.dart';
 import '../providers/location_provider.dart';
 import '../providers/municipality_providers.dart';
+import '../services/landmark_service.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
 import '../widgets/category_badge.dart';
@@ -44,9 +45,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   // Stage 4 — rerouting state
   bool _isRerouting = false;
 
-  // Stage 5 — AR proximity state
+  // Stage 5 — AR proximity & physical visit state
   bool _arPromptShown = false;
   bool _showArProximityBanner = false;
+  bool _physicalVisitLogged = false;
 
   // Transport mode selection (persists for the session)
   TransportMode _selectedMode = TransportMode.walking;
@@ -105,11 +107,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       locState.position.longitude,
     );
 
+    // Log MAP_NAV analytics event
+    ref.read(landmarkServiceProvider).logAnalyticsEvent(
+          landmarkId: destination.id,
+          actionType: 'MAP_NAV',
+          verificationMethod: 'REMOTE',
+          userLat: originPos.latitude,
+          userLng: originPos.longitude,
+        );
+
     setState(() {
       _isCalculatingRoute = true;
       _activeRoute = null;
       _routeDestination = destination;
       _livePosition = originPos;
+      _physicalVisitLogged = false;
     });
 
     try {
@@ -173,6 +185,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
       // Stage 4: deviation check — reroute if walked off the route
       _checkAndReroute(newPos, destination);
+
+      // Log PHYSICAL_VISIT when entering 100m geofence radius
+      if (!_physicalVisitLogged &&
+          remaining <= AppConstants.physicalVisitRadiusMetres) {
+        _physicalVisitLogged = true;
+        ref.read(landmarkServiceProvider).logAnalyticsEvent(
+              landmarkId: destination.id,
+              actionType: 'PHYSICAL_VISIT',
+              verificationMethod: 'GPS_GEOFENCE',
+              userLat: position.latitude,
+              userLng: position.longitude,
+            );
+      }
 
       // Stage 5: AR proximity — trigger banner when within 50 m of destination
       if (!_arPromptShown &&

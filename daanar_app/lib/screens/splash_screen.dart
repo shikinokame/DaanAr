@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../core/theme.dart';
+import '../core/token_storage.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -29,9 +30,12 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Navigate to home after 2.5s
-    Future.delayed(const Duration(milliseconds: 2500), () {
-      if (mounted) context.go('/home');
+    // Navigate to home (if registered) or mobile registration after 2.5s
+    Future.delayed(const Duration(milliseconds: 2500), () async {
+      final registered = await TokenStorage.hasMobileRegistration();
+      if (mounted) {
+        context.go(registered ? '/home' : '/register');
+      }
     });
   }
 

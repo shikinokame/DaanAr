@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../core/constants.dart';
 import '../core/theme.dart';
 import '../services/landmark_service.dart';
 
-/// Launches the WebAR experience in the device's native Chrome browser,
-/// which properly handles getUserMedia (camera) permissions.
+/// Shows the 3D / AR landmark page inside the app (no Chrome redirect).
+///
+/// The page is rendered in an in-app WebView. When the user taps
+/// "View in your Space (AR)", `<model-viewer>` asks to open Google Scene Viewer
+/// through an `intent://` URL. We catch that URL and open Scene Viewer
+/// natively (see MainActivity.kt). It shows on top of DaanAR, and pressing
+/// Back returns straight to this screen.
 class ARViewScreen extends ConsumerStatefulWidget {
   final int landmarkId;
   final String landmarkName;
@@ -23,54 +28,101 @@ class ARViewScreen extends ConsumerStatefulWidget {
 }
 
 class _ARViewScreenState extends ConsumerState<ARViewScreen> {
-  bool _launching = false;
-  bool _permissionDenied = false;
+  static const _arChannel = MethodChannel('ph.daanar/ar');
+
+  late final WebViewController _controller;
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _checkAndLaunch();
+
+    // Log virtual AR view (fire-and-forget)
+    ref.read(landmarkServiceProvider).logAnalyticsEvent(
+          landmarkId: widget.landmarkId,
+          actionType: 'AR_VIEW',
+          verificationMethod: 'REMOTE',
+        );
+
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..addJavaScriptChannel('DaanAR', onMessageReceived: (msg) {
+        if (msg.message == 'close' && mounted) Navigator.of(context).maybePop();
+      })
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: _onNavigationRequest,
+          onPageFinished: (_) async {
+            // The page's own back button calls history.back(), which does
+            // nothing in a WebView with no history, so route it to Flutter.
+            await _controller.runJavaScript(
+              "window.history.back = function(){ DaanAR.postMessage('close'); };",
+            );
+            if (mounted) setState(() => _loading = false);
+          },
+          onWebResourceError: (err) {
+            if (err.isForMainFrame == false) return;
+            if (mounted) {
+              setState(() {
+                _loading = false;
+                _error = err.description;
+              });
+            }
+          },
+        ),
+      );
+
+    _load();
   }
 
-  Future<void> _checkAndLaunch() async {
-    final status = await Permission.camera.request();
-    if (!mounted) return;
-
-    if (status.isDenied || status.isPermanentlyDenied) {
-      setState(() => _permissionDenied = true);
-      return;
-    }
-
-    await _launchAR();
-  }
-
-  Future<void> _launchAR() async {
-    setState(() => _launching = true);
-
-    // Log the AR visit (fire-and-forget — never blocks the launch)
-    ref.read(landmarkServiceProvider).logVisit(widget.landmarkId);
-
-    // Derive the server base (strip /api/v1 if present)
+  Uri get _arUrl {
     final serverBase = AppConstants.baseUrl
         .replaceAll('/api/v1', '')
         .replaceAll(RegExp(r'/$'), '');
-    final url = Uri.parse(
+    return Uri.parse(
       '$serverBase/ar/landmark/${widget.landmarkId}?ngrok-skip-browser-warning=true',
     );
+  }
 
-    try {
-      final launched = await launchUrl(
-        url,
-        mode: LaunchMode.externalApplication, // opens in Chrome
-      );
-      if (!launched && mounted) {
-        _showError('Could not open Chrome. Please install Chrome and try again.');
+  void _load() {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    _controller.loadRequest(
+      _arUrl,
+      headers: const {'ngrok-skip-browser-warning': 'true'},
+    );
+  }
+
+  Future<NavigationDecision> _onNavigationRequest(NavigationRequest req) async {
+    final url = req.url;
+    final isSceneViewer =
+        url.startsWith('intent://arvr.google.com') ||
+        url.startsWith('https://arvr.google.com/scene-viewer');
+
+    if (isSceneViewer) {
+      bool opened = false;
+      try {
+        opened = await _arChannel
+                .invokeMethod<bool>('openSceneViewer', {'uri': url}) ??
+            false;
+      } on PlatformException {
+        opened = false;
       }
-    } catch (e) {
-      if (mounted) _showError(e.toString());
-    } finally {
-      if (mounted) setState(() => _launching = false);
+      if (!opened && mounted) {
+        _showError(
+          'AR is not available on this device. Make sure "Google Play Services for AR" is installed and up to date.',
+        );
+      }
+      return NavigationDecision.prevent;
     }
+
+    // Block any other non-web scheme so the WebView never shows an error page.
+    if (!url.startsWith('http')) return NavigationDecision.prevent;
+    return NavigationDecision.navigate;
   }
 
   void _showError(String msg) {
@@ -86,54 +138,26 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // ── Back button ───────────────────────────────────────────────
-            Positioned(
-              top: 8,
-              left: 8,
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.secondary.withValues(alpha: 0.5)),
-                  ),
-                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
-                ),
+            if (_error == null) WebViewWidget(controller: _controller),
+            if (_loading && _error == null)
+              const Center(
+                child: CircularProgressIndicator(color: AppColors.secondary),
               ),
-            ),
-
-            // ── Main content ──────────────────────────────────────────────
-            Center(
-              child: _permissionDenied
-                  ? _buildPermissionDenied()
-                  : _buildLaunchUI(),
-            ),
+            if (_error != null) Center(child: _buildError()),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLaunchUI() {
+  Widget _buildError() {
     return Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // AR icon
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.secondary.withValues(alpha: 0.15),
-              border: Border.all(color: AppColors.secondary, width: 2),
-            ),
-            child: const Icon(Icons.view_in_ar_rounded, size: 52, color: AppColors.secondary),
-          ),
-          const SizedBox(height: 24),
+          const Icon(Icons.cloud_off, size: 64, color: AppColors.secondary),
+          const SizedBox(height: 16),
           Text(
             widget.landmarkName,
             style: const TextStyle(
@@ -143,73 +167,35 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           const Text(
-            'The AR experience will open in Chrome.\nAllow camera access when prompted.',
-            style: TextStyle(color: Colors.white60, fontSize: 14, height: 1.6),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
-
-          if (_launching)
-            const CircularProgressIndicator(color: AppColors.secondary)
-          else
-            ElevatedButton.icon(
-              onPressed: _launchAR,
-              icon: const Icon(Icons.open_in_browser),
-              label: const Text(
-                'Open AR in Chrome',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.secondary,
-                foregroundColor: AppColors.charcoal,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-
-          const SizedBox(height: 20),
-          const Text(
-            'Press Back in Chrome to return to the app.',
-            style: TextStyle(color: Colors.white38, fontSize: 12),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPermissionDenied() {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.no_photography, size: 72, color: AppColors.secondary),
-          const SizedBox(height: 20),
-          const Text(
-            'Camera Permission Required',
-            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'DaanAR needs camera access for the AR experience. Please grant camera permission in your device settings.',
+            'Could not load the AR experience. Check your connection and that the server is running.',
             style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 28),
-          ElevatedButton.icon(
-            onPressed: openAppSettings,
-            icon: const Icon(Icons.settings),
-            label: const Text('Open Settings'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.secondary,
-              foregroundColor: AppColors.charcoal,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white38),
+                ),
+                child: const Text('Back'),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.secondary,
+                  foregroundColor: AppColors.charcoal,
+                ),
+              ),
+            ],
           ),
         ],
       ),

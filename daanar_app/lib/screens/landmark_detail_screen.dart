@@ -1,20 +1,72 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/constants.dart';
 import '../core/theme.dart';
+import '../models/landmark.dart';
 import '../providers/landmark_providers.dart';
 import '../services/ar_service.dart';
+import '../services/landmark_service.dart';
+import '../services/location_service.dart';
 import '../widgets/category_badge.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/shimmer_loading.dart';
 import 'ar_view_screen.dart';
 
-class LandmarkDetailScreen extends ConsumerWidget {
+class LandmarkDetailScreen extends ConsumerStatefulWidget {
   final int id;
   const LandmarkDetailScreen({super.key, required this.id});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LandmarkDetailScreen> createState() =>
+      _LandmarkDetailScreenState();
+}
+
+class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
+  bool _physicalCheckDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Log PAGE_VIEW when user opens landmark details screen
+    Future.microtask(() {
+      ref.read(landmarkServiceProvider).logAnalyticsEvent(
+            landmarkId: widget.id,
+            actionType: 'PAGE_VIEW',
+            verificationMethod: 'REMOTE',
+          );
+    });
+  }
+
+  Future<void> _verifyOnSitePresence(Landmark landmark) async {
+    if (_physicalCheckDone) return;
+    _physicalCheckDone = true;
+
+    try {
+      final pos = await LocationService.getCurrentPosition();
+      final distance = LocationService.distanceBetween(
+        pos.latitude,
+        pos.longitude,
+        landmark.lat,
+        landmark.lng,
+      );
+      if (distance <= AppConstants.physicalVisitRadiusMetres) {
+        await ref.read(landmarkServiceProvider).logAnalyticsEvent(
+              landmarkId: landmark.id,
+              actionType: 'PHYSICAL_VISIT',
+              verificationMethod: 'GPS_GEOFENCE',
+              userLat: pos.latitude,
+              userLng: pos.longitude,
+            );
+      }
+    } catch (_) {
+      // Location unavailable — GeofenceService stream will still handle background checks
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final id = widget.id;
     final landmarkAsync = ref.watch(landmarkDetailProvider(id));
 
     return landmarkAsync.when(
@@ -28,6 +80,7 @@ class LandmarkDetailScreen extends ConsumerWidget {
       ),
       data: (result) {
         final landmark = result.landmark;
+        _verifyOnSitePresence(landmark);
         final hasImage = landmark.media.heroImage != null;
         return Scaffold(
           backgroundColor: AppColors.background,

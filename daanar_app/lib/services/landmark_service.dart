@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api_client.dart';
 import '../core/cache_service.dart';
+import '../core/token_storage.dart';
 import '../models/landmark.dart';
 
 final landmarkServiceProvider = Provider<LandmarkService>(
@@ -95,14 +96,49 @@ class LandmarkService {
     }
   }
 
-  /// POST /api/v1/landmarks/{id}/visit
-  /// Fire-and-forget — logs an AR view for the Reports page.
-  /// Errors are silently swallowed so a network issue never blocks the AR launch.
-  Future<void> logVisit(int landmarkId) async {
+  /// POST /api/v1/analytics/log-event
+  /// Logs a split analytics event tied to the authenticated mobile user (`userId`).
+  /// Supported `actionType` values:
+  /// - `'PHYSICAL_VISIT'` (On-site GPS geofence <= 100m or QR marker)
+  /// - `'AR_VIEW'` (Virtual 3D/AR model view)
+  /// - `'MAP_NAV'` (Route navigation started)
+  /// - `'PAGE_VIEW'` (Landmark details screen opened)
+  Future<void> logAnalyticsEvent({
+    required int landmarkId,
+    required String actionType,
+    String? verificationMethod,
+    double? userLat,
+    double? userLng,
+  }) async {
     try {
-      await _dio.post('/landmarks/$landmarkId/visit');
+      final userId = await TokenStorage.getUserId();
+      final phone = await TokenStorage.getPhoneNumber();
+      final payload = <String, dynamic>{
+        'userId': userId,
+        'landmarkId': landmarkId,
+        'actionType': actionType,
+        'verificationMethod': verificationMethod ??
+            (actionType == 'PHYSICAL_VISIT' ? 'GPS_GEOFENCE' : 'REMOTE'),
+        'userLat': ?userLat,
+        'userLng': ?userLng,
+        'deviceId': userId != null ? 'user_$userId' : phone,
+      };
+
+      try {
+        await _dio.post('/analytics/log-event', data: payload);
+      } on DioException {
+        // Fallback to legacy visit endpoint if running against an older server build
+        await _dio.post('/landmarks/$landmarkId/visit', data: payload);
+      }
     } catch (_) {
-      // Non-critical — ignore failures silently
+      // Non-critical — never block UI interaction on analytics network failure
     }
   }
+
+  /// Backwards-compatible alias for logging an AR view.
+  Future<void> logVisit(int landmarkId) => logAnalyticsEvent(
+        landmarkId: landmarkId,
+        actionType: 'AR_VIEW',
+        verificationMethod: 'REMOTE',
+      );
 }
