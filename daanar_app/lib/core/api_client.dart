@@ -63,8 +63,9 @@ class _AuthInterceptor extends Interceptor {
   ) async {
     final statusCode = err.response?.statusCode;
     final path = err.requestOptions.path;
-    final isAuthForm =
-        path.contains('/auth/register-mobile') || path.contains('/auth/login');
+    final isAuthForm = path.contains('/auth/register-mobile') ||
+        path.contains('/auth/send-otp') ||
+        path.contains('/auth/login');
 
     if (statusCode == 403 && !isAuthForm) {
       await TokenStorage.deleteToken();

@@ -57,8 +57,106 @@ class AuthController extends Controller
     }
 
     /**
+     * POST /api/v1/auth/send-otp
+     * Generates and sends a 6-digit OTP code to a Philippine mobile number.
+     * Supports Semaphore / PhilSMS gateways when configured in .env, with an
+     * automatic simulator fallback for offline/demo environments.
+     */
+    public function sendOtp(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'phone_number' => ['required', 'string', 'max:32'],
+        ]);
+
+        $normalizedPhone = User::normalizePhoneNumber($validated['phone_number']);
+
+        if (! preg_match('/^\+639\d{9}$/', $normalizedPhone)) {
+            throw ValidationException::withMessages([
+                'phone_number' => ['Please enter a valid Philippine mobile number (e.g., 09171234567 or +639171234567).'],
+            ]);
+        }
+
+        // Reject blocked numbers immediately before sending an OTP
+        $existingUser = User::where('phone_number', $normalizedPhone)->first();
+        if ($existingUser && strtolower((string) $existingUser->status) === 'blocked') {
+            return response()->json([
+                'status'  => 'Blocked',
+                'message' => 'This mobile number has been blocked by an administrator.',
+            ], 403);
+        }
+
+        $otpCode = (string) random_int(100000, 999999);
+        $expiresAt = now()->addMinutes(5)->timestamp;
+
+        // Store in cache and also generate an HMAC-signed stateless token so verification
+        // works reliably across ephemeral containers.
+        \Illuminate\Support\Facades\Cache::put(
+            "mobile_otp:{$normalizedPhone}",
+            $otpCode,
+            now()->addMinutes(5)
+        );
+
+        $signature = hash_hmac(
+            'sha256',
+            "{$normalizedPhone}|{$otpCode}|{$expiresAt}",
+            (string) config('app.key')
+        );
+        $otpToken = "{$expiresAt}.{$signature}";
+
+        // Attempt real SMS delivery if Semaphore or PhilSMS is configured in .env
+        $smsSent = false;
+        $semaphoreKey = env('SEMAPHORE_API_KEY');
+        $philsmsKey = env('PHILSMS_API_KEY');
+        $messageBody = "DaanAR: Your verification code is {$otpCode}. Valid for 5 minutes.";
+
+        if (! empty($semaphoreKey)) {
+            try {
+                $resp = \Illuminate\Support\Facades\Http::timeout(8)->post(
+                    'https://api.semaphore.co/api/v4/messages',
+                    [
+                        'apikey'     => $semaphoreKey,
+                        'number'     => $normalizedPhone,
+                        'message'    => $messageBody,
+                        'sendername' => env('SEMAPHORE_SENDER_NAME', 'SEMAPHORE'),
+                    ]
+                );
+                $smsSent = $resp->successful();
+            } catch (\Throwable $e) {
+                $smsSent = false;
+            }
+        } elseif (! empty($philsmsKey)) {
+            try {
+                $resp = \Illuminate\Support\Facades\Http::withToken($philsmsKey)
+                    ->timeout(8)
+                    ->post('https://app.philsms.com/api/v3/sms/send', [
+                        'recipient' => ltrim($normalizedPhone, '+'),
+                        'sender_id' => env('PHILSMS_SENDER_ID', 'PhilSMS'),
+                        'type'      => 'plain',
+                        'message'   => $messageBody,
+                    ]);
+                $smsSent = $resp->successful();
+            } catch (\Throwable $e) {
+                $smsSent = false;
+            }
+        }
+
+        $demoMode = (bool) env('OTP_DEMO_MODE', true) || ! $smsSent;
+
+        return response()->json([
+            'data' => [
+                'phone_number'     => $normalizedPhone,
+                'masked_phone'     => User::maskPhone($normalizedPhone),
+                'expires_in'       => 300,
+                'delivery_channel' => $smsSent ? 'sms' : 'simulator',
+                'otp_token'        => $otpToken,
+                'demo_otp'         => $demoMode ? $otpCode : null,
+            ],
+        ]);
+    }
+
+    /**
      * POST /api/v1/auth/register-mobile
-     * Registers or retrieves a mobile app user by Philippine mobile number & role.
+     * Verifies the 6-digit OTP (when supplied) and registers or retrieves the mobile user.
      */
     public function registerMobile(Request $request): JsonResponse
     {
@@ -68,6 +166,8 @@ class AuthController extends Controller
             // Legacy values (Tourist/Student/Educator) from older APK builds are still accepted.
             'user_role'    => ['nullable', 'string', 'max:32'],
             'name'         => ['nullable', 'string', 'max:255'],
+            'otp_code'     => ['nullable', 'string', 'size:6'],
+            'otp_token'    => ['nullable', 'string', 'max:255'],
         ]);
 
         $normalizedPhone = User::normalizePhoneNumber($validated['phone_number']);
@@ -77,6 +177,38 @@ class AuthController extends Controller
             throw ValidationException::withMessages([
                 'phone_number' => ['Please enter a valid Philippine mobile number (e.g., 09171234567 or +639171234567).'],
             ]);
+        }
+
+        // Verify 6-digit OTP when provided by the mobile client
+        if ($request->filled('otp_code')) {
+            $inputOtp = trim((string) $validated['otp_code']);
+            $cachedOtp = \Illuminate\Support\Facades\Cache::get("mobile_otp:{$normalizedPhone}");
+            $verified = false;
+
+            if ($cachedOtp && hash_equals((string) $cachedOtp, $inputOtp)) {
+                $verified = true;
+            } elseif (! empty($validated['otp_token']) && str_contains($validated['otp_token'], '.')) {
+                [$expiresAtStr, $providedSig] = explode('.', $validated['otp_token'], 2);
+                $expiresAt = (int) $expiresAtStr;
+                if ($expiresAt >= now()->timestamp) {
+                    $expectedSig = hash_hmac(
+                        'sha256',
+                        "{$normalizedPhone}|{$inputOtp}|{$expiresAt}",
+                        (string) config('app.key')
+                    );
+                    if (hash_equals($expectedSig, $providedSig)) {
+                        $verified = true;
+                    }
+                }
+            }
+
+            if (! $verified) {
+                throw ValidationException::withMessages([
+                    'otp_code' => ['The 6-digit verification code is invalid or has expired.'],
+                ]);
+            }
+
+            \Illuminate\Support\Facades\Cache::forget("mobile_otp:{$normalizedPhone}");
         }
 
         $roleNormalized = User::ROLE_NORMAL_USER;

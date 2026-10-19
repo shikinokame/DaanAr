@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\TrailController;
 use Illuminate\Support\Facades\Route;
 
 // Unversioned aliases requested by specification (/api/auth/*, /api/analytics/*, /api/admin/*)
+Route::post('auth/send-otp', [AuthController::class, 'sendOtp']);
 Route::post('auth/register-mobile', [AuthController::class, 'registerMobile']);
 Route::get('auth/me', [AuthController::class, 'me']);
 Route::post('analytics/log-event', [AnalyticsController::class, 'logEvent'])
@@ -23,6 +24,7 @@ Route::prefix('v1')->group(function () {
     // ── Auth ────────────────────────────────────────────────────────────────
     Route::prefix('auth')->group(function () {
         Route::post('login', [AuthController::class, 'login']);
+        Route::post('send-otp', [AuthController::class, 'sendOtp']);
         Route::post('register-mobile', [AuthController::class, 'registerMobile']);
         Route::get('me', [AuthController::class, 'me']);
 

@@ -33,14 +33,74 @@ class AuthService {
     return RegExp(r'^\+639\d{9}$').hasMatch(normalized);
   }
 
+  /// POST /api/v1/auth/send-otp
+  /// Requests a 6-digit verification code for [phoneNumber].
+  /// If the server is unreachable (offline mode), generates a local 6-digit simulator code
+  /// so the OTP verification flow still works seamlessly during offline testing.
+  Future<Map<String, dynamic>> sendOtp({
+    required String phoneNumber,
+  }) async {
+    final normalizedPhone = normalizePhilippinePhone(phoneNumber);
+
+    try {
+      final response = await _dio.post(
+        '/auth/send-otp',
+        data: {
+          'phone_number': normalizedPhone,
+        },
+      );
+
+      final body = response.data as Map<String, dynamic>;
+      final data = (body['data'] as Map<String, dynamic>?) ?? body;
+      return data;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403 || e.response?.statusCode == 422) {
+        rethrow;
+      }
+
+      // Offline fallback: generate local 6-digit code
+      final localCode =
+          ((DateTime.now().millisecondsSinceEpoch % 900000) + 100000).toString();
+      return {
+        'phone_number': normalizedPhone,
+        'masked_phone': normalizedPhone,
+        'expires_in': 300,
+        'delivery_channel': 'simulator',
+        'otp_token': 'offline.$localCode',
+        'demo_otp': localCode,
+      };
+    }
+  }
+
   /// POST /api/v1/auth/register-mobile
-  /// Registers or retrieves the user by mobile number + role and persists
-  /// `userId`, `phoneNumber`, `userRole`, and `token` locally.
+  /// Verifies the 6-digit OTP and registers or retrieves the user by mobile number,
+  /// persisting `userId`, `phoneNumber`, `userRole`, and `token` locally.
   Future<Map<String, dynamic>> registerMobile({
     required String phoneNumber,
     required String userRole,
+    String? otpCode,
+    String? otpToken,
   }) async {
     final normalizedPhone = normalizePhilippinePhone(phoneNumber);
+
+    // Verify offline OTP token if generated while offline
+    if (otpToken != null && otpToken.startsWith('offline.')) {
+      final expectedCode = otpToken.substring('offline.'.length);
+      if (otpCode != expectedCode) {
+        throw DioException(
+          requestOptions: RequestOptions(path: '/auth/register-mobile'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/auth/register-mobile'),
+            statusCode: 422,
+            data: {
+              'message':
+                  'The 6-digit verification code is invalid or has expired.',
+            },
+          ),
+          type: DioExceptionType.badResponse,
+        );
+      }
+    }
 
     try {
       final response = await _dio.post(
@@ -48,6 +108,8 @@ class AuthService {
         data: {
           'phone_number': normalizedPhone,
           'user_role': userRole,
+          'otp_code': ?otpCode,
+          'otp_token': ?otpToken,
         },
       );
 
@@ -55,7 +117,8 @@ class AuthService {
       final data = (body['data'] as Map<String, dynamic>?) ?? body;
       final userMap = (data['user'] as Map<String, dynamic>?) ?? data;
 
-      final userId = (data['user_id'] ?? userMap['id'] ?? userMap['user_id']) as int;
+      final userId =
+          (data['user_id'] ?? userMap['id'] ?? userMap['user_id']) as int;
       final token = data['token'] as String?;
 
       await TokenStorage.saveUserSession(
@@ -67,7 +130,7 @@ class AuthService {
 
       return data;
     } on DioException catch (e) {
-      // If user account is explicitly blocked (403), rethrow to show message
+      // If user account is explicitly blocked (403) or OTP invalid (422), rethrow to show message
       if (e.response?.statusCode == 403 || e.response?.statusCode == 422) {
         rethrow;
       }
@@ -75,8 +138,7 @@ class AuthService {
       // Offline / legacy backend fallback: derive a deterministic positive userId
       // from the phone number so analytics events still carry a consistent userId
       // and sync once the backend is reachable.
-      final fallbackUserId =
-          normalizedPhone.hashCode.abs() % 900000 + 100000;
+      final fallbackUserId = normalizedPhone.hashCode.abs() % 900000 + 100000;
       await TokenStorage.saveUserSession(
         userId: fallbackUserId,
         phoneNumber: normalizedPhone,
