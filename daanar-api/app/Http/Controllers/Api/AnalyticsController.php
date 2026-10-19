@@ -21,8 +21,30 @@ class AnalyticsController extends Controller
      */
     public function logEvent(Request $request): JsonResponse
     {
-        $userId = $request->input('userId', $request->input('user_id'))
-            ?? $request->user('sanctum')?->id;
+        // Prefer authenticated Sanctum token user over client-supplied userId
+        $authUser = $request->user('sanctum');
+        $payloadUserId = $request->input('userId', $request->input('user_id'));
+
+        $user = $authUser;
+        if (! $user && $request->hasHeader('X-User-Phone')) {
+            $normalizedPhone = User::normalizePhoneNumber((string) $request->header('X-User-Phone'));
+            $user = User::where('phone_number', $normalizedPhone)->first();
+        }
+        if (! $user && $payloadUserId && is_numeric($payloadUserId)) {
+            $user = User::find((int) $payloadUserId);
+        }
+
+        // Reject analytics logging if the user is Blocked
+        if ($user && strtolower((string) $user->status) === 'blocked') {
+            $user->tokens()->delete();
+
+            return response()->json([
+                'status'  => 'Blocked',
+                'message' => 'This mobile number has been blocked by an administrator.',
+            ], 403);
+        }
+
+        $userId = $user?->id;
         $landmarkId = $request->input('landmarkId', $request->input('landmark_id'));
         $actionType = strtoupper((string) $request->input('actionType', $request->input('action_type', 'AR_VIEW')));
         $verificationMethod = $request->input('verificationMethod', $request->input('verification_method'));
@@ -40,10 +62,6 @@ class AnalyticsController extends Controller
             return response()->json([
                 'message' => 'Invalid actionType. Allowed: ' . implode(', ', LandmarkVisit::ALLOWED_ACTIONS),
             ], 422);
-        }
-
-        if ($userId && ! User::whereKey($userId)->exists()) {
-            $userId = null;
         }
 
         // Anti-Spam / Deduplication Rule for PHYSICAL_VISIT:

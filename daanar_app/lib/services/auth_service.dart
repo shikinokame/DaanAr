@@ -128,4 +128,46 @@ class AuthService {
     final token = await TokenStorage.getToken();
     return token != null;
   }
+
+  /// GET /api/v1/auth/me
+  /// Verifies with the server on app launch whether the registered mobile user
+  /// is still `Active` (`'active'`), `Blocked` (`'blocked'`), or deleted (`'unregistered'`).
+  /// If offline / unreachable, returns `'offline'` so cached exploration continues to work.
+  Future<String> verifyActiveSession() async {
+    final phone = await TokenStorage.getPhoneNumber();
+    final userId = await TokenStorage.getUserId();
+
+    if (phone == null || phone.isEmpty) {
+      return 'unregistered';
+    }
+
+    try {
+      await _dio.get(
+        '/auth/me',
+        queryParameters: {
+          'phone_number': phone,
+          'user_id': ?userId,
+        },
+        options: Options(
+          sendTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+        ),
+      );
+      return 'active';
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      if (code == 403) {
+        await TokenStorage.deleteToken();
+        return 'blocked';
+      }
+      if (code == 401) {
+        await TokenStorage.deleteToken();
+        return 'unregistered';
+      }
+      // Network timeout / offline — keep local session intact for offline browsing
+      return 'offline';
+    } catch (_) {
+      return 'offline';
+    }
+  }
 }

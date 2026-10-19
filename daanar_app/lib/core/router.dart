@@ -16,7 +16,11 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/register',
-      builder: (context, state) => const MobileRegistrationScreen(),
+      builder: (context, state) => MobileRegistrationScreen(
+        initialError: state.uri.queryParameters['blocked'] == '1'
+            ? 'This mobile number has been blocked by an administrator.'
+            : null,
+      ),
     ),
 
     // Shell with bottom nav (Home | Trails | Map)

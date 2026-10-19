@@ -44,7 +44,8 @@ class LandmarkService {
       }
 
       return {'landmarks': items, 'meta': data['meta'] ?? {}, 'fromCache': false};
-    } on DioException {
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) rethrow;
       // Network failed — try cache
       final cached = await CacheService.loadList(CacheService.keyLandmarks);
       if (cached != null) {
@@ -68,7 +69,8 @@ class LandmarkService {
         landmarks: rawList.map(Landmark.fromJson).toList(),
         fromCache: false,
       );
-    } on DioException {
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) rethrow;
       final cached = await CacheService.loadList(CacheService.keyFeaturedLandmarks);
       if (cached != null) {
         return (landmarks: cached.map(Landmark.fromJson).toList(), fromCache: true);
@@ -87,7 +89,8 @@ class LandmarkService {
       await CacheService.saveMap(CacheService.landmarkDetailKey(id), raw);
 
       return (landmark: Landmark.fromJson(raw), fromCache: false);
-    } on DioException {
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) rethrow;
       final cached = await CacheService.loadMap(CacheService.landmarkDetailKey(id));
       if (cached != null) {
         return (landmark: Landmark.fromJson(cached), fromCache: true);
@@ -126,7 +129,8 @@ class LandmarkService {
 
       try {
         await _dio.post('/analytics/log-event', data: payload);
-      } on DioException {
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 403) return;
         // Fallback to legacy visit endpoint if running against an older server build
         await _dio.post('/landmarks/$landmarkId/visit', data: payload);
       }

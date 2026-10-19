@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/theme.dart';
 import '../core/token_storage.dart';
+import '../services/auth_service.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
+class _SplashScreenState extends ConsumerState<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _fadeAnim;
@@ -30,11 +32,23 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Navigate to home (if registered) or mobile registration after 2.5s
+    // Navigate to home (if registered & active) or mobile registration after 2.5s
     Future.delayed(const Duration(milliseconds: 2500), () async {
       final registered = await TokenStorage.hasMobileRegistration();
-      if (mounted) {
-        context.go(registered ? '/home' : '/register');
+      if (!registered) {
+        if (mounted) context.go('/register');
+        return;
+      }
+
+      final status = await ref.read(authServiceProvider).verifyActiveSession();
+      if (!mounted) return;
+
+      if (status == 'blocked') {
+        context.go('/register?blocked=1');
+      } else if (status == 'unregistered') {
+        context.go('/register');
+      } else {
+        context.go('/home');
       }
     });
   }

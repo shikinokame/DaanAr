@@ -8,7 +8,9 @@ import '../core/theme.dart';
 import '../services/auth_service.dart';
 
 class MobileRegistrationScreen extends ConsumerStatefulWidget {
-  const MobileRegistrationScreen({super.key});
+  final String? initialError;
+
+  const MobileRegistrationScreen({super.key, this.initialError});
 
   @override
   ConsumerState<MobileRegistrationScreen> createState() =>
@@ -21,6 +23,21 @@ class _MobileRegistrationScreenState
   final _phoneController = TextEditingController();
   bool _submitting = false;
   String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _errorText = widget.initialError;
+  }
+
+  @override
+  void didUpdateWidget(covariant MobileRegistrationScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialError != null &&
+        widget.initialError != oldWidget.initialError) {
+      _errorText = widget.initialError;
+    }
+  }
 
   @override
   void dispose() {

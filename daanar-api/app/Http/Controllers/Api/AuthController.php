@@ -133,6 +133,62 @@ class AuthController extends Controller
     }
 
     /**
+     * GET /api/v1/auth/me
+     * Verifies the mobile user's current account status (Active vs Blocked).
+     */
+    public function me(Request $request): JsonResponse
+    {
+        $user = $request->user('sanctum');
+
+        if (! $user) {
+            $rawPhone = $request->query('phone_number') ?? $request->header('X-User-Phone');
+            if ($rawPhone) {
+                $normalizedPhone = User::normalizePhoneNumber((string) $rawPhone);
+                $user = User::where('phone_number', $normalizedPhone)->first();
+            }
+        }
+
+        if (! $user) {
+            $userId = $request->query('user_id');
+            if ($userId && is_numeric($userId)) {
+                $user = User::find((int) $userId);
+            }
+        }
+
+        if (! $user) {
+            return response()->json([
+                'status'  => 'Unregistered',
+                'message' => 'Account not found. Please register your mobile number.',
+            ], 401);
+        }
+
+        if (strtolower((string) $user->status) === 'blocked') {
+            $user->tokens()->delete();
+
+            return response()->json([
+                'status'  => 'Blocked',
+                'message' => 'This mobile number has been blocked by an administrator.',
+            ], 403);
+        }
+
+        return response()->json([
+            'data' => [
+                'user_id' => $user->id,
+                'status'  => $user->status ?? 'Active',
+                'user'    => [
+                    'id'           => $user->id,
+                    'user_id'      => $user->id,
+                    'name'         => $user->name,
+                    'phone_number' => $user->phone_number,
+                    'masked_phone' => User::maskPhone($user->phone_number),
+                    'user_role'    => $user->user_role ?? $user->role,
+                    'status'       => $user->status ?? 'Active',
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * POST /api/v1/auth/logout
      * Invalidates the current token.
      */

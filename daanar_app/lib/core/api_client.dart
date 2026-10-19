@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'constants.dart';
+import 'router.dart';
 import 'token_storage.dart';
 
 /// Global Dio provider — single instance reused across all services.
@@ -36,7 +37,8 @@ class ApiClient {
   Dio get dio => _dio;
 }
 
-/// Injects the stored Sanctum token into every request automatically.
+/// Injects the stored Sanctum token and mobile number into every request,
+/// and kicks the user back to `/register` immediately if the server returns 403 Blocked.
 class _AuthInterceptor extends Interceptor {
   @override
   Future<void> onRequest(
@@ -44,15 +46,31 @@ class _AuthInterceptor extends Interceptor {
     RequestInterceptorHandler handler,
   ) async {
     final token = await TokenStorage.getToken();
-    if (token != null) {
+    if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
+    }
+    final phone = await TokenStorage.getPhoneNumber();
+    if (phone != null && phone.isNotEmpty) {
+      options.headers['X-User-Phone'] = phone;
     }
     handler.next(options);
   }
 
   @override
-  void onError(DioException err, ErrorInterceptorHandler handler) {
-    // Let callers handle 401/422 — don't swallow errors here.
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final statusCode = err.response?.statusCode;
+    final path = err.requestOptions.path;
+    final isAuthForm =
+        path.contains('/auth/register-mobile') || path.contains('/auth/login');
+
+    if (statusCode == 403 && !isAuthForm) {
+      await TokenStorage.deleteToken();
+      appRouter.go('/register?blocked=1');
+    }
+
     handler.next(err);
   }
 }
