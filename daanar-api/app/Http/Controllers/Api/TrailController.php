@@ -11,14 +11,15 @@ class TrailController extends Controller
 {
     /**
      * GET /api/v1/trails
-     * All trails with municipality and landmark count (no ordered landmarks yet).
+     * All trails with municipality, ordered landmarks, and precomputed segments.
      */
     public function index(): AnonymousResourceCollection
     {
         $trails = Trail::query()
-            ->with('municipality')
+            ->with(['municipality', 'landmarks.municipality', 'segments'])
             ->withCount('landmarks')
-            ->orderBy('name')
+            ->orderByRaw('CASE WHEN municipality_id IS NULL THEN 0 ELSE 1 END')
+            ->orderBy('id')
             ->get();
 
         return TrailResource::collection($trails);
@@ -26,11 +27,11 @@ class TrailController extends Controller
 
     /**
      * GET /api/v1/trails/{trail}
-     * Single trail with its municipality and ordered landmarks.
+     * Single trail with its municipality, ordered landmarks, and route segments.
      */
     public function show(Trail $trail): TrailResource
     {
-        $trail->load(['municipality', 'landmarks.municipality']);
+        $trail->load(['municipality', 'landmarks.municipality', 'segments']);
 
         return new TrailResource($trail);
     }

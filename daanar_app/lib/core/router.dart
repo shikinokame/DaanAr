@@ -6,6 +6,8 @@ import '../screens/home_screen.dart';
 import '../screens/trails_screen.dart';
 import '../screens/map_screen.dart';
 import '../screens/landmark_detail_screen.dart';
+import '../screens/trail_detail_screen.dart';
+import '../screens/trail_navigation_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/splash',
@@ -40,6 +42,20 @@ final appRouter = GoRouter(
           builder: (context, state) => const MapScreen(),
         ),
       ],
+    ),
+
+    // Trail detail & live GPS + AR directional navigation — outside shell (full screen)
+    GoRoute(
+      path: '/trails/:id',
+      builder: (context, state) => TrailDetailScreen(
+        trailId: int.parse(state.pathParameters['id']!),
+      ),
+    ),
+    GoRoute(
+      path: '/trails/:id/navigate',
+      builder: (context, state) => TrailNavigationScreen(
+        trailId: int.parse(state.pathParameters['id']!),
+      ),
     ),
 
     // Landmark detail — outside shell (full screen)

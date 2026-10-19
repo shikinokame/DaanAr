@@ -72,4 +72,10 @@ class Landmark {
           : null,
     );
   }
+
+  /// Whether this landmark has an AR / 3D experience available.
+  bool get isArReady =>
+      (media.arModelUrl != null && media.arModelUrl!.isNotEmpty) ||
+      (media.arHtmlPath != null && media.arHtmlPath!.isNotEmpty) ||
+      id > 0;
 }

@@ -22,10 +22,9 @@ class TrailResource extends Resource
 
     protected static ?int $navigationSort = 3;
 
-    /** Hidden from nav — replaced by the Reports custom page */
     public static function shouldRegisterNavigation(): bool
     {
-        return false;
+        return true;
     }
 
     public static function form(Form $form): Form
@@ -38,17 +37,22 @@ class TrailResource extends Resource
                             ->required()
                             ->maxLength(255),
                         Forms\Components\Select::make('municipality_id')
-                            ->label('Municipality')
+                            ->label('Municipality (leave blank for multi-town trail)')
                             ->relationship('municipality', 'name')
-                            ->required()
+                            ->nullable()
+                            ->placeholder('Multi-Municipality / District Trail')
                             ->searchable()
                             ->preload()
                             ->live(),
+                        Forms\Components\TextInput::make('district')
+                            ->label('District / Coverage Label')
+                            ->placeholder('e.g. District 4')
+                            ->maxLength(64),
                         Forms\Components\Select::make('difficulty')
                             ->options([
-                                'easy' => 'Easy',
+                                'easy'     => 'Easy',
                                 'moderate' => 'Moderate',
-                                'hard' => 'Hard',
+                                'hard'     => 'Hard',
                             ])
                             ->required()
                             ->native(false),
@@ -58,6 +62,11 @@ class TrailResource extends Resource
                             ->numeric()
                             ->minValue(1)
                             ->suffix('min'),
+                        Forms\Components\TextInput::make('total_distance_metres')
+                            ->label('Total Distance (metres)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->suffix('m'),
                         Forms\Components\Textarea::make('description')
                             ->required()
                             ->rows(4)
@@ -66,7 +75,7 @@ class TrailResource extends Resource
                     ->columns(2),
 
                 Forms\Components\Section::make('Landmarks on Trail')
-                    ->description('Select landmarks and drag to set the visit order.')
+                    ->description('Select landmarks across one or more municipalities and drag to set the visit order.')
                     ->schema([
                         Forms\Components\Select::make('landmarks')
                             ->relationship(
@@ -83,7 +92,7 @@ class TrailResource extends Resource
                             ->reorderable()
                             ->orderColumn('order')
                             ->columnSpanFull()
-                            ->helperText('Only landmarks from the selected municipality are shown.'),
+                            ->helperText('Leave Municipality blank above to combine landmarks from multiple towns (e.g. District 4 Heritage Trail).'),
                     ]),
             ]);
     }
@@ -94,35 +103,41 @@ class TrailResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->weight('bold'),
                 Tables\Columns\TextColumn::make('municipality.name')
-                    ->label('Municipality')
+                    ->label('Coverage')
+                    ->default(fn (Trail $record): string => $record->district ?: 'Multi-Municipality')
                     ->sortable()
                     ->searchable(),
                 Tables\Columns\TextColumn::make('difficulty')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => ucfirst($state))
                     ->color(fn (string $state): string => match ($state) {
-                        'easy' => 'success',
+                        'easy'     => 'success',
                         'moderate' => 'warning',
-                        'hard' => 'danger',
-                        default => 'gray',
+                        'hard'     => 'danger',
+                        default    => 'gray',
                     })
                     ->sortable(),
                 Tables\Columns\TextColumn::make('estimated_time')
                     ->label('Duration')
                     ->formatStateUsing(fn (int $state): string => "{$state} min")
                     ->sortable(),
+                Tables\Columns\TextColumn::make('total_distance_metres')
+                    ->label('Distance')
+                    ->formatStateUsing(fn (?int $state): string => $state ? number_format($state / 1000, 1) . ' km' : '—')
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('landmarks_count')
                     ->counts('landmarks')
-                    ->label('Landmarks'),
+                    ->label('Stops'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('difficulty')
                     ->options([
-                        'easy' => 'Easy',
+                        'easy'     => 'Easy',
                         'moderate' => 'Moderate',
-                        'hard' => 'Hard',
+                        'hard'     => 'Hard',
                     ]),
                 Tables\Filters\SelectFilter::make('municipality_id')
                     ->label('Municipality')
@@ -147,9 +162,9 @@ class TrailResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListTrails::route('/'),
+            'index'  => Pages\ListTrails::route('/'),
             'create' => Pages\CreateTrail::route('/create'),
-            'edit' => Pages\EditTrail::route('/{record}/edit'),
+            'edit'   => Pages\EditTrail::route('/{record}/edit'),
         ];
     }
 }

@@ -238,17 +238,139 @@ class DaanArSeeder extends Seeder
         ];
 
         // Safely update or create landmarks without wiping existing entries
+        $landmarkModels = collect();
         foreach ($landmarks as $landmark) {
             $municipalityName = $landmark['municipality'];
             unset($landmark['municipality']);
 
-            Landmark::updateOrCreate(
+            $lm = Landmark::updateOrCreate(
                 ['name' => $landmark['name']],
                 [
                     ...$landmark,
                     'municipality_id' => $municipalities[$municipalityName]->id,
                 ]
             );
+            $landmarkModels->put($lm->name, $lm);
+        }
+
+        // ── Seed District 4 Heritage Trail + Town Sub-Trails ─────────────────
+        $trailsData = [
+            [
+                'name'           => 'District 4 Heritage Trail',
+                'municipality'   => null,
+                'district'       => 'District 4 (Dagupan • Mangaldan • San Jacinto • San Fabian)',
+                'difficulty'     => 'moderate',
+                'estimated_time' => 95,
+                'description'    => 'Flagship multi-town heritage circuit across Pangasinan’s 4th District—starting from Dagupan City’s Spanish-era cathedral and 1892 railway terminus, passing through Mangaldan and San Jacinto’s centuries-old parishes and 1899 battlefield, and culminating along the coastal heritage sites of San Fabian.',
+                'stops'          => [
+                    'Santuario de San Juan Evangelista',
+                    'Old PNR Dagupan/Mayombo (1st) Station',
+                    'Saint Thomas Aquinas Parish Church',
+                    'PNR Mangaldan Station',
+                    'St. Hyacinth Parish Church – San Jacinto',
+                    'Battle of San Jacinto Monument',
+                    'Parish of St. Fabian, Pope and Martyr',
+                    'Old PNR San Fabian Station',
+                ],
+            ],
+            [
+                'name'           => 'Dagupan City Colonial & Railway Walk',
+                'municipality'   => 'Dagupan City',
+                'district'       => 'District 4',
+                'difficulty'     => 'easy',
+                'estimated_time' => 25,
+                'description'    => 'Explore Downtown Dagupan’s spiritual seat at the Santuario de San Juan Evangelista and trace the historic 1892 Ferrocarril de Manila-Dagupan terminus in Mayombo.',
+                'stops'          => [
+                    'Santuario de San Juan Evangelista',
+                    'Old PNR Dagupan/Mayombo (1st) Station',
+                ],
+            ],
+            [
+                'name'           => 'Mangaldan Dominican & Rail Trail',
+                'municipality'   => 'Mangaldan',
+                'district'       => 'District 4',
+                'difficulty'     => 'easy',
+                'estimated_time' => 20,
+                'description'    => 'A walking heritage route connecting Mangaldan’s 1600 Dominican parish church of Saint Thomas Aquinas with the American-era PNR Mangaldan Station.',
+                'stops'          => [
+                    'Saint Thomas Aquinas Parish Church',
+                    'PNR Mangaldan Station',
+                ],
+            ],
+            [
+                'name'           => 'San Jacinto 1598 Mission & Battlefield Trail',
+                'municipality'   => 'San Jacinto',
+                'district'       => 'District 4',
+                'difficulty'     => 'easy',
+                'estimated_time' => 30,
+                'description'    => 'Journey from the 1598 Dominican mission of St. Hyacinth Parish Church to the historic site of the November 1899 Battle of San Jacinto.',
+                'stops'          => [
+                    'St. Hyacinth Parish Church – San Jacinto',
+                    'Battle of San Jacinto Monument',
+                ],
+            ],
+            [
+                'name'           => 'San Fabian Coastal & Railway Trail',
+                'municipality'   => 'San Fabian',
+                'district'       => 'District 4',
+                'difficulty'     => 'easy',
+                'estimated_time' => 20,
+                'description'    => 'Discover San Fabian’s 1717 coastal parish church overlooking Lingayen Gulf and the historic railway junction toward Camp One and Baguio.',
+                'stops'          => [
+                    'Parish of St. Fabian, Pope and Martyr',
+                    'Old PNR San Fabian Station',
+                ],
+            ],
+            [
+                'name'           => 'Manaoag Marian Pilgrimage Trail',
+                'municipality'   => 'Manaoag',
+                'district'       => 'Manaoag',
+                'difficulty'     => 'easy',
+                'estimated_time' => 35,
+                'description'    => 'Follow the historic devotion route from the Minor Basilica of Our Lady of the Rosary of Manaoag through the Spanish colonial town plaza to the 1908 Binday railway station.',
+                'stops'          => [
+                    'Minor Basilica of Our Lady of the Rosary of Manaoag',
+                    'Historic Town Plaza and Street Grid',
+                    'Old PNR Manaoag (Binday) Station',
+                ],
+            ],
+        ];
+
+        foreach ($trailsData as $tData) {
+            $muniId = $tData['municipality']
+                ? ($municipalities[$tData['municipality']]->id ?? null)
+                : null;
+
+            $trail = \App\Models\Trail::updateOrCreate(
+                ['name' => $tData['name']],
+                [
+                    'municipality_id' => $muniId,
+                    'district'        => $tData['district'],
+                    'difficulty'      => $tData['difficulty'],
+                    'estimated_time'  => $tData['estimated_time'],
+                    'description'     => $tData['description'],
+                ]
+            );
+
+            $syncMap = [];
+            $order = 1;
+            foreach ($tData['stops'] as $stopName) {
+                $lm = $landmarkModels->get($stopName) ?? Landmark::where('name', $stopName)->first();
+                if ($lm) {
+                    $syncMap[$lm->id] = ['order' => $order++];
+                }
+            }
+
+            if (! empty($syncMap)) {
+                $trail->landmarks()->sync($syncMap);
+            }
+        }
+
+        // Precompute ORS / fallback route segments for all seeded trails
+        try {
+            \Illuminate\Support\Facades\Artisan::call('trails:precompute-routes');
+        } catch (\Throwable $e) {
+            // Ignore if trail_segments migration hasn't run yet
         }
     }
 }

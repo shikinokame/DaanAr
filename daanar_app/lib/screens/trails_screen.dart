@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../core/theme.dart';
 import '../providers/landmark_providers.dart';
 import '../providers/municipality_providers.dart';
+import '../providers/trail_providers.dart';
 import '../widgets/landmark_card.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/shimmer_loading.dart';
@@ -26,10 +28,11 @@ class _TrailsScreenState extends ConsumerState<TrailsScreen> {
   Widget build(BuildContext context) {
     final landmarksAsync = ref.watch(filteredLandmarksProvider);
     final municipalitiesAsync = ref.watch(municipalityListProvider);
+    final trailsAsync = ref.watch(trailListProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Explore Landmarks'),
+        title: const Text('Trails & Landmarks'),
         actions: [
           if (_selectedMunicipality != null || _selectedCategory != null)
             TextButton(
@@ -42,19 +45,140 @@ class _TrailsScreenState extends ConsumerState<TrailsScreen> {
         children: [
           // Show offline banner when serving cached data
           if (municipalitiesAsync.whenOrNull(data: (r) => r.fromCache) == true ||
-              landmarksAsync.whenOrNull(data: (r) => r.fromCache) == true)
+              landmarksAsync.whenOrNull(data: (r) => r.fromCache) == true ||
+              trailsAsync.whenOrNull(data: (r) => r.fromCache) == true)
             OfflineBanner(
               onRetry: () {
                 ref.invalidate(filteredLandmarksProvider);
                 ref.invalidate(municipalityListProvider);
+                ref.invalidate(trailListProvider);
               },
             ),
           Expanded(
             child: RefreshIndicator(
               color: AppColors.primary,
-              onRefresh: () async => ref.invalidate(filteredLandmarksProvider),
+              onRefresh: () async {
+                ref.invalidate(filteredLandmarksProvider);
+                ref.invalidate(trailListProvider);
+              },
               child: CustomScrollView(
           slivers: [
+            // ── Curated Heritage Trails ─────────────────────────────────────
+            SliverToBoxAdapter(
+              child: trailsAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, _1) => const SizedBox.shrink(),
+                data: (trailResult) {
+                  if (trailResult.trails.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
+                        child: Text(
+                          'GUIDED GPS + AR TRAILS',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        height: 112,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: trailResult.trails.length,
+                          itemBuilder: (context, idx) {
+                            final t = trailResult.trails[idx];
+                            final distKm = (t.totalDistanceMetres ?? 0) > 0
+                                ? '${(t.totalDistanceMetres! / 1000).toStringAsFixed(1)} km'
+                                : '${t.landmarks.length} stops';
+                            return GestureDetector(
+                              onTap: () => context.push('/trails/${t.id}'),
+                              child: Container(
+                                width: 230,
+                                margin: const EdgeInsets.only(right: 12),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.route_rounded,
+                                          color: AppColors.secondary,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            t.name,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '${t.landmarks.length} stops • $distKm',
+                                          style: const TextStyle(
+                                            color: AppColors.secondary,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 7,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(alpha: 0.16),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            'Start →',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  );
+                },
+              ),
+            ),
+
             // ── Municipality chips ──────────────────────────────────────────
             SliverToBoxAdapter(
               child: municipalitiesAsync.when(

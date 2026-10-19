@@ -242,9 +242,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               itemBuilder: (_, i) {
                                 final t = result.trails[i];
                                 return GestureDetector(
-                                  onTap: () => context.go('/trails'),
+                                  onTap: () => context.push('/trails/${t.id}'),
                                   child: Container(
-                                    width: 180,
+                                    width: 210,
                                     margin: const EdgeInsets.only(right: 12),
                                     padding: const EdgeInsets.all(14),
                                     decoration: BoxDecoration(
