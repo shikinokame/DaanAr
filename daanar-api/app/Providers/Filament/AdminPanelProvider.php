@@ -10,7 +10,6 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Support\Enums\MaxWidth;
 use Filament\View\PanelsRenderHook;
 use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -25,22 +24,17 @@ class AdminPanelProvider extends PanelProvider
     public function panel(Panel $panel): Panel
     {
         return $panel
-            // NOTE: ->default() removed intentionally so API routes aren't intercepted.
+            // NOTE: ->default() removed intentionally.
+            // When set as the default panel, Filament's Authenticate middleware
+            // intercepts ALL unauthenticated requests (including API routes) and
+            // redirects them to /admin/login — breaking mobile token-based auth.
             ->id('admin')
             ->path('admin')
             ->login()
             ->brandName('DaanAR')
-            ->font('Plus Jakarta Sans')
-            ->darkMode(true, isForced: true)
-            ->maxContentWidth(MaxWidth::Full)
-            ->sidebarCollapsibleOnDesktop()
+            ->darkMode(true)
             ->colors([
-                'primary' => Color::hex('#D4A056'),
-                'gray'    => Color::Stone,
-                'success' => Color::hex('#4E9F76'),
-                'warning' => Color::hex('#D4A056'),
-                'danger'  => Color::hex('#C86D51'),
-                'info'    => Color::hex('#7C98B3'),
+                'primary' => Color::Amber,
             ])
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
