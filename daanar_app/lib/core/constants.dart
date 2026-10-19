@@ -20,12 +20,8 @@ class AppConstants {
   static const String phoneNumberKey = 'auth_phone_number';
   static const String userRoleKey = 'auth_user_role';
 
-  // Available mobile visitor roles
-  static const List<String> userRoles = [
-    'Tourist',
-    'Student',
-    'Educator',
-  ];
+  // All mobile visitors share one role (Tourist / Student / Educator merged)
+  static const String normalUserRole = 'Normal User';
 
   // Pagination
   static const int defaultPageSize = 15;

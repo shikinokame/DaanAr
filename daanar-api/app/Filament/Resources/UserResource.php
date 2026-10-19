@@ -69,21 +69,20 @@ class UserResource extends Resource
                         Forms\Components\Select::make('role')
                             ->label('Role')
                             ->options([
-                                'Tourist'     => 'Tourist (Mobile)',
-                                'Student'     => 'Student (Mobile)',
-                                'Educator'    => 'Educator (Mobile)',
-                                'super_admin' => 'Admin (CMS)',
+                                User::ROLE_NORMAL_USER => 'Normal User (Mobile)',
+                                'super_admin'          => 'Admin (CMS)',
                             ])
-                            ->formatStateUsing(fn (?string $state): ?string => in_array($state, ['officer', 'admin'], true) ? 'super_admin' : $state)
+                            ->formatStateUsing(fn (?string $state): ?string => match (true) {
+                                in_array($state, ['officer', 'admin'], true)              => 'super_admin',
+                                in_array($state, User::LEGACY_MOBILE_ROLES, true)         => User::ROLE_NORMAL_USER,
+                                default                                                    => $state,
+                            })
+                            ->default(User::ROLE_NORMAL_USER)
                             ->required()
                             ->native(false)
                             ->live()
                             ->afterStateUpdated(function (?string $state, Forms\Set $set) {
-                                if (in_array($state, ['Tourist', 'Student', 'Educator'], true)) {
-                                    $set('user_role', $state);
-                                } else {
-                                    $set('user_role', null);
-                                }
+                                $set('user_role', $state === User::ROLE_NORMAL_USER ? User::ROLE_NORMAL_USER : null);
                             }),
                         Forms\Components\Select::make('status')
                             ->label('Account Status')
@@ -122,20 +121,14 @@ class UserResource extends Resource
                 Tables\Columns\TextColumn::make('role')
                     ->label('Role')
                     ->badge()
-                    ->state(fn (User $record): string => $record->user_role ?: $record->role ?: 'Tourist')
+                    ->state(fn (User $record): string => $record->user_role ?: $record->role ?: User::ROLE_NORMAL_USER)
                     ->formatStateUsing(fn (string $state): string => match (strtolower($state)) {
                         'super_admin', 'admin', 'officer' => 'Admin (CMS)',
-                        'tourist'                         => 'Tourist',
-                        'student'                         => 'Student',
-                        'educator'                        => 'Educator',
-                        default                           => ucfirst($state),
+                        default                           => User::ROLE_NORMAL_USER,
                     })
                     ->color(fn (string $state): string => match (strtolower($state)) {
                         'super_admin', 'admin', 'officer' => 'danger',
-                        'tourist'                         => 'success',
-                        'student'                         => 'warning',
-                        'educator'                        => 'primary',
-                        default                           => 'gray',
+                        default                           => 'success',
                     })
                     ->sortable(),
 
@@ -187,11 +180,16 @@ class UserResource extends Resource
                 Tables\Filters\SelectFilter::make('role')
                     ->label('Role')
                     ->options([
-                        'Tourist'     => 'Tourist',
-                        'Student'     => 'Student',
-                        'Educator'    => 'Educator',
-                        'super_admin' => 'Admin (CMS)',
-                    ]),
+                        User::ROLE_NORMAL_USER => 'Normal User',
+                        'super_admin'          => 'Admin (CMS)',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return match ($data['value'] ?? null) {
+                            'super_admin'          => $query->whereIn('role', ['super_admin', 'admin', 'officer']),
+                            User::ROLE_NORMAL_USER => $query->whereNotIn('role', ['super_admin', 'admin', 'officer']),
+                            default                => $query,
+                        };
+                    }),
                 Tables\Filters\SelectFilter::make('status')
                     ->options([
                         'Active'  => 'Active',

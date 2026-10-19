@@ -64,7 +64,9 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'phone_number' => ['required', 'string', 'max:32'],
-            'user_role'    => ['required', 'string', 'in:Tourist,Student,Educator,tourist,student,educator'],
+            // Optional: all mobile visitors share one role ("Normal User").
+            // Legacy values (Tourist/Student/Educator) from older APK builds are still accepted.
+            'user_role'    => ['nullable', 'string', 'max:32'],
             'name'         => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -77,7 +79,7 @@ class AuthController extends Controller
             ]);
         }
 
-        $roleNormalized = ucfirst(strtolower($validated['user_role']));
+        $roleNormalized = User::ROLE_NORMAL_USER;
 
         $user = User::where('phone_number', $normalizedPhone)->first();
 

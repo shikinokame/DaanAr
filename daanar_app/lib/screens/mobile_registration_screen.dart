@@ -19,21 +19,8 @@ class _MobileRegistrationScreenState
     extends ConsumerState<MobileRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
-  String _selectedRole = AppConstants.userRoles.first; // 'Tourist'
   bool _submitting = false;
   String? _errorText;
-
-  static const Map<String, IconData> _roleIcons = {
-    'Tourist': Icons.explore_rounded,
-    'Student': Icons.school_rounded,
-    'Educator': Icons.menu_book_rounded,
-  };
-
-  static const Map<String, String> _roleSubtitles = {
-    'Tourist': 'Exploring heritage sites & trails',
-    'Student': 'Learning local history & culture',
-    'Educator': 'Teaching or guiding heritage tours',
-  };
 
   @override
   void dispose() {
@@ -50,7 +37,7 @@ class _MobileRegistrationScreenState
     try {
       await ref.read(authServiceProvider).registerMobile(
             phoneNumber: _phoneController.text.trim(),
-            userRole: _selectedRole,
+            userRole: AppConstants.normalUserRole,
           );
       if (mounted) {
         context.go('/home');
@@ -224,90 +211,7 @@ class _MobileRegistrationScreenState
                           ],
                         ),
 
-                        const SizedBox(height: 20),
-                        const Text(
-                          'I am visiting as a:',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.charcoal,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-
-                        ...AppConstants.userRoles.map((role) {
-                          final selected = _selectedRole == role;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () => setState(() => _selectedRole = role),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 160),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: selected
-                                      ? AppColors.primary.withValues(alpha: 0.09)
-                                      : AppColors.background,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: selected
-                                        ? AppColors.primary
-                                        : Colors.transparent,
-                                    width: 1.8,
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      _roleIcons[role] ?? Icons.person_rounded,
-                                      color: selected
-                                          ? AppColors.primary
-                                          : AppColors.textMuted,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            role,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.bold,
-                                              color: selected
-                                                  ? AppColors.primary
-                                                  : AppColors.charcoal,
-                                            ),
-                                          ),
-                                          Text(
-                                            _roleSubtitles[role] ?? '',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: AppColors.textMuted,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Icon(
-                                      selected
-                                          ? Icons.radio_button_checked_rounded
-                                          : Icons.radio_button_off_rounded,
-                                      color: selected
-                                          ? AppColors.primary
-                                          : AppColors.textMuted,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
+                        const SizedBox(height: 12),
 
                         if (_errorText != null) ...[
                           const SizedBox(height: 8),

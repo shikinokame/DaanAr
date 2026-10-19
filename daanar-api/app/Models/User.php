@@ -16,6 +16,12 @@ class User extends Authenticatable implements FilamentUser
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    /** Single role for all mobile app visitors (replaces Tourist / Student / Educator). */
+    public const ROLE_NORMAL_USER = 'Normal User';
+
+    /** Legacy mobile roles merged into ROLE_NORMAL_USER. */
+    public const LEGACY_MOBILE_ROLES = ['Tourist', 'Student', 'Educator'];
+
     /**
      * The attributes that are mass assignable.
      *
