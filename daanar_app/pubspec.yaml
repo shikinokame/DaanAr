@@ -46,6 +46,10 @@ dependencies:
   # GPS location for navigation
   geolocator: ^13.0.2
 
+  # Live camera preview & magnetometer compass for AR ground chevrons
+  camera: ^0.11.1
+  flutter_compass: ^0.8.1
+
   # Local push notifications (landmark arrival alerts)
   flutter_local_notifications: ^18.0.1
 

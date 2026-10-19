@@ -16,6 +16,7 @@ import '../services/landmark_service.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
 import '../widgets/category_badge.dart';
+import 'ar_direction_screen.dart';
 import 'ar_view_screen.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -761,13 +762,46 @@ class _LiveNavPanel extends StatelessWidget {
                     ),
                   ),
 
+                // AR Guide button (live camera + 3D red ground chevrons)
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ArDirectionScreen(
+                            targetStop: destination,
+                            stopNumber: 1,
+                            totalStops: 1,
+                            segmentPoints: initialRoute?.points ?? const [],
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.explore_rounded, size: 20),
+                    label: const Text(
+                      'AR Guide',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 4,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+
                 // Stop Navigation button
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: onStop,
                     icon: const Icon(Icons.stop_circle_outlined, size: 20),
                     label: const Text(
-                      'Stop Navigation',
+                      'Stop',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(

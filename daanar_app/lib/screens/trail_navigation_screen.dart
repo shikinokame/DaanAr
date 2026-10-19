@@ -569,6 +569,8 @@ class _TrailNavigationScreenState
                                         stopNumber: currentIdx + 1,
                                         totalStops: stops.length,
                                         nextInstruction: nextInstruction,
+                                        segmentPoints:
+                                            activeSegment?.points ?? const [],
                                         onMarkArrived: () => _handleStopArrived(
                                           trail,
                                           currentStop,
