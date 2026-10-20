@@ -187,7 +187,7 @@ class Trail {
       }
       if (pts.isNotEmpty) return pts;
     }
-    return landmarks.map((l) => LatLng(l.lat, l.lng)).toList();
+    return const <LatLng>[];
   }
 
   /// Finds the precomputed segment leading to [stopIndex] (`stopIndex - 1 -> stopIndex`).

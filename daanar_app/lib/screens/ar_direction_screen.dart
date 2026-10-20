@@ -11,6 +11,7 @@ import '../models/landmark.dart';
 import '../providers/location_provider.dart';
 import '../services/bearing_service.dart';
 import '../services/location_service.dart';
+import '../services/routing_service.dart';
 
 /// Live Camera AR Directional Wayfinder with 3D Red Extruded Ground Chevrons,
 /// Green Corner Reticles, Top Destination/Distance Card, and Floating Mini-Map.
@@ -49,6 +50,8 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
   double _compassHeading = 0.0;
   double _headingOffset = 0.0; // Optional manual fine-tuning offset
   bool _showCalibrationSlider = false;
+  List<LatLng> _fetchedRoutePoints = const [];
+  bool _isFetchingRoute = false;
 
   GoogleMapController? _miniMapController;
   late final AnimationController _flowController;
@@ -147,14 +150,45 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
         _userPos = nextPos;
       });
       _miniMapController?.animateCamera(CameraUpdate.newLatLng(nextPos));
+      _ensureRoadRouteIfNeeded(nextPos);
     });
+
+    if (_userPos != null) {
+      _ensureRoadRouteIfNeeded(_userPos!);
+    }
+  }
+
+  Future<void> _ensureRoadRouteIfNeeded(LatLng origin) async {
+    if (widget.segmentPoints.length >= 2 ||
+        _fetchedRoutePoints.length >= 2 ||
+        _isFetchingRoute) {
+      return;
+    }
+    _isFetchingRoute = true;
+    try {
+      final route = await RoutingService.getRoute(
+        origin: origin,
+        destination: LatLng(widget.targetStop.lat, widget.targetStop.lng),
+      );
+      if (mounted && route.points.length >= 2) {
+        setState(() {
+          _fetchedRoutePoints = route.points;
+        });
+      }
+    } catch (_) {
+      // Keep empty if offline
+    } finally {
+      _isFetchingRoute = false;
+    }
   }
 
   /// Finds the next immediate waypoint along `segmentPoints` ahead of the user
   /// (at least ~12 metres ahead) so the ground chevrons follow the street path
   /// rather than pointing through buildings. Falls back to the stop coordinates.
   LatLng _nextPathTarget(LatLng user, LatLng finalStop) {
-    final pts = widget.segmentPoints;
+    final pts = widget.segmentPoints.length >= 2
+        ? widget.segmentPoints
+        : _fetchedRoutePoints;
     if (pts.length < 2) return finalStop;
 
     int closestIdx = 0;
@@ -210,7 +244,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
 
     final activePolyline = widget.segmentPoints.length >= 2
         ? widget.segmentPoints
-        : <LatLng>[userPos, stopPos];
+        : _fetchedRoutePoints;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -491,12 +525,13 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
                       ),
                     },
                     polylines: {
-                      Polyline(
-                        polylineId: const PolylineId('ar_mini_route'),
-                        points: activePolyline,
-                        color: const Color(0xFF2563EB),
-                        width: 5,
-                      ),
+                      if (activePolyline.length >= 2)
+                        Polyline(
+                          polylineId: const PolylineId('ar_mini_route'),
+                          points: activePolyline,
+                          color: const Color(0xFF2563EB),
+                          width: 5,
+                        ),
                     },
                   ),
                   // Tap mini-map to return to full map view

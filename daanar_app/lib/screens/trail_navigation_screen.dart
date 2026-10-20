@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../core/constants.dart';
 import '../core/theme.dart';
 import '../models/landmark.dart';
+import '../models/route_result.dart';
 import '../models/trail.dart';
 import '../providers/trail_providers.dart';
 import '../providers/location_provider.dart';
@@ -12,6 +13,7 @@ import '../providers/trail_navigation_provider.dart';
 import '../services/bearing_service.dart';
 import '../services/landmark_service.dart';
 import '../services/location_service.dart';
+import '../services/routing_service.dart';
 import 'ar_direction_screen.dart';
 import 'ar_view_screen.dart';
 
@@ -32,6 +34,12 @@ class _TrailNavigationScreenState
   LatLng? _livePos;
   final Set<int> _arrivalSheetShownFor = {};
 
+  // Live road-snapped walking route from user's GPS position to current stop
+  RouteResult? _liveRoute;
+  int? _liveRouteStopId;
+  LatLng? _lastRoutedOrigin;
+  bool _isRoutingLive = false;
+
   @override
   void initState() {
     super.initState();
@@ -42,12 +50,14 @@ class _TrailNavigationScreenState
     await ref.read(locationProvider.notifier).requestLocation();
     final locState = ref.read(locationProvider);
     if (locState is LocationReady && mounted) {
+      final initialPos = LatLng(
+        locState.position.latitude,
+        locState.position.longitude,
+      );
       setState(() {
-        _livePos = LatLng(
-          locState.position.latitude,
-          locState.position.longitude,
-        );
+        _livePos = initialPos;
       });
+      _triggerLiveRouteIfNeeded(initialPos);
     }
 
     _posSub = LocationService.getPositionStream().listen((pos) {
@@ -55,7 +65,72 @@ class _TrailNavigationScreenState
       final newPos = LatLng(pos.latitude, pos.longitude);
       setState(() => _livePos = newPos);
       _checkStopProximity(newPos);
+      _triggerLiveRouteIfNeeded(newPos);
     });
+  }
+
+  void _triggerLiveRouteIfNeeded(LatLng userPos, {Landmark? explicitStop}) {
+    Landmark? targetStop = explicitStop;
+    if (targetStop == null) {
+      final trail = ref.read(trailDetailProvider(widget.trailId)).valueOrNull?.trail;
+      if (trail == null || trail.landmarks.isEmpty) return;
+      final session = ref.read(trailNavigationProvider(widget.trailId));
+      final idx = session.currentStopIndex.clamp(0, trail.landmarks.length - 1);
+      targetStop = trail.landmarks[idx];
+    }
+
+    final stopChanged = _liveRouteStopId != targetStop.id;
+    final needsInitialRoute = _liveRoute == null || _lastRoutedOrigin == null;
+    final movedFarFromLastOrigin = _lastRoutedOrigin != null &&
+        BearingService.distanceMetres(userPos, _lastRoutedOrigin!) > 60.0 &&
+        !_isPointNearPolyline(userPos, _liveRoute?.points ?? const [], 45.0);
+
+    if ((stopChanged || needsInitialRoute || movedFarFromLastOrigin) &&
+        !_isRoutingLive) {
+      _fetchLiveWalkRoute(userPos, targetStop);
+    }
+  }
+
+  bool _isPointNearPolyline(
+    LatLng point,
+    List<LatLng> polyline,
+    double thresholdMetres,
+  ) {
+    for (final vertex in polyline) {
+      if (BearingService.distanceMetres(point, vertex) <= thresholdMetres) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _fetchLiveWalkRoute(LatLng origin, Landmark stop) async {
+    setState(() {
+      _isRoutingLive = true;
+      if (_liveRouteStopId != stop.id) {
+        _liveRoute = null;
+      }
+      _liveRouteStopId = stop.id;
+    });
+
+    try {
+      final route = await RoutingService.getRoute(
+        origin: origin,
+        destination: LatLng(stop.lat, stop.lng),
+      );
+      if (!mounted) return;
+      setState(() {
+        _liveRoute = route;
+        _liveRouteStopId = stop.id;
+        _lastRoutedOrigin = origin;
+        _isRoutingLive = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isRoutingLive = false;
+      });
+    }
   }
 
   void _checkStopProximity(LatLng userPos) {
@@ -281,20 +356,54 @@ class _TrailNavigationScreenState
           final currentStop = stops[currentIdx];
           final currentTarget = LatLng(currentStop.lat, currentStop.lng);
 
+          // Ensure live road-snapped route is fetched whenever GPS + stop are ready
+          if (_livePos != null &&
+              (_liveRouteStopId != currentStop.id ||
+                  (_liveRoute == null && !_isRoutingLive))) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _livePos != null) {
+                _triggerLiveRouteIfNeeded(_livePos!, explicitStop: currentStop);
+              }
+            });
+          }
+
           final activeSegment = trail.segmentToStop(currentIdx);
-          final nextInstruction =
-              activeSegment != null && activeSegment.steps.isNotEmpty
+          final hasLiveRouteForStop = _liveRoute != null &&
+              _liveRouteStopId == currentStop.id &&
+              _liveRoute!.points.length >= 2;
+
+          // Road-snapped polyline points for the active leg (never a 2-point straight line)
+          final List<LatLng> activeRoutePoints = hasLiveRouteForStop
+              ? _liveRoute!.points
+              : (activeSegment != null && activeSegment.points.length >= 2
+                  ? activeSegment.points
+                  : const <LatLng>[]);
+
+          final liveInstruction = hasLiveRouteForStop
+              ? _liveRoute!.activeInstructionFor(_livePos)
+              : null;
+
+          final nextInstruction = (liveInstruction != null &&
+                  liveInstruction.isNotEmpty)
+              ? liveInstruction
+              : (activeSegment != null && activeSegment.steps.isNotEmpty
                   ? activeSegment.steps.first.instruction
-                  : 'Proceed toward ${currentStop.name}';
+                  : (_isRoutingLive
+                      ? 'Calculating walkable road route...'
+                      : 'Follow road toward ${currentStop.name}'));
 
-          final distMetres = _livePos != null
-              ? BearingService.distanceMetres(_livePos!, currentTarget)
-              : (activeSegment?.distanceM.toDouble() ?? 450.0);
+          final distMetres = hasLiveRouteForStop
+              ? _liveRoute!.distanceMetres
+              : (_livePos != null
+                  ? BearingService.distanceMetres(_livePos!, currentTarget)
+                  : (activeSegment?.distanceM.toDouble() ?? 450.0));
 
-          final etaLabel = BearingService.formatEta(
-            distMetres,
-            walking: trail.municipality != null,
-          );
+          final etaLabel = hasLiveRouteForStop
+              ? _liveRoute!.etaLabel
+              : BearingService.formatEta(
+                  distMetres,
+                  walking: trail.municipality != null,
+                );
 
           final markers = <Marker>{
             for (int i = 0; i < stops.length; i++)
@@ -329,20 +438,16 @@ class _TrailNavigationScreenState
                 color: AppColors.primary.withValues(alpha: 0.35),
                 width: 4,
               ),
-            // Highlighted active segment
-            if (activeSegment != null && activeSegment.points.length >= 2)
+            // Highlighted road-snapped active route leg (never a 2-point straight line)
+            if (activeRoutePoints.length >= 2)
               Polyline(
                 polylineId: const PolylineId('active_trail_leg'),
-                points: activeSegment.points,
+                points: activeRoutePoints,
                 color: AppColors.secondary,
                 width: 6,
-              )
-            else if (_livePos != null)
-              Polyline(
-                polylineId: const PolylineId('live_to_stop_line'),
-                points: [_livePos!, currentTarget],
-                color: AppColors.secondary,
-                width: 5,
+                jointType: JointType.round,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
               ),
           };
 
@@ -569,8 +674,7 @@ class _TrailNavigationScreenState
                                         stopNumber: currentIdx + 1,
                                         totalStops: stops.length,
                                         nextInstruction: nextInstruction,
-                                        segmentPoints:
-                                            activeSegment?.points ?? const [],
+                                        segmentPoints: activeRoutePoints,
                                         onMarkArrived: () => _handleStopArrived(
                                           trail,
                                           currentStop,
