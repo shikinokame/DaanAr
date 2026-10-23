@@ -27,9 +27,9 @@ class ArController extends Controller
 
         $baseUrl = $request->getSchemeAndHttpHost();
 
-        // Resolve model URL — use uploaded .glb or null
+        // Resolve model URL — use uploaded .glb with Scene Viewer cache-buster
         $modelUrl = $landmark->ar_model_url
-            ? $baseUrl . '/storage/' . $landmark->ar_model_url
+            ? $baseUrl . '/storage/' . $landmark->ar_model_url . '?sv=2'
             : null;
 
         // Hero image for poster/thumbnail
