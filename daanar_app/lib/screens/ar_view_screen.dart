@@ -81,8 +81,9 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
     final serverBase = AppConstants.baseUrl
         .replaceAll('/api/v1', '')
         .replaceAll(RegExp(r'/$'), '');
+    final cacheBust = DateTime.now().millisecondsSinceEpoch ~/ 60000;
     return Uri.parse(
-      '$serverBase/ar/landmark/${widget.landmarkId}?ngrok-skip-browser-warning=true',
+      '$serverBase/ar/landmark/${widget.landmarkId}?ngrok-skip-browser-warning=true&v=$cacheBust',
     );
   }
 

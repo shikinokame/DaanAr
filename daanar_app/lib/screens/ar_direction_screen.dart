@@ -12,7 +12,6 @@ import '../providers/location_provider.dart';
 import '../services/bearing_service.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
-import 'ar_view_screen.dart';
 
 /// Live Camera AR Directional Wayfinder with 3D Red Extruded Ground Chevrons,
 /// Green Corner Reticles, Top Destination/Distance Card, and Floating Mini-Map.
@@ -243,13 +242,6 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
       deviceHeading: effectiveHeading,
     );
 
-    // Direct bearing to the landmark itself for the floating AR world marker
-    final landmarkBearing = BearingService.bearingBetween(userPos, stopPos);
-    final landmarkAngle = BearingService.relativeAngle(
-      targetBearing: landmarkBearing,
-      deviceHeading: effectiveHeading,
-    );
-
     final activePolyline = widget.segmentPoints.length >= 2
         ? widget.segmentPoints
         : _fetchedRoutePoints;
@@ -296,13 +288,6 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
                 },
               ),
             ),
-          ),
-
-          // ── 2.5 Compass-Locked Floating Interactive AR World Portal ───────
-          _buildFloatingArPortal(
-            context: context,
-            landmarkAngle: landmarkAngle,
-            distMetres: distMetres,
           ),
 
           // ── 3. Neon Green Scanner Corner Brackets (⌜ ⌝ / ⌞ ⌟) ─────────────
@@ -620,197 +605,6 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
     }
 
     return const ColoredBox(color: Colors.black);
-  }
-
-  void _openInteractive3dAr(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ARViewScreen(
-          landmarkId: widget.targetStop.id,
-          landmarkName: widget.targetStop.name,
-        ),
-      ),
-    );
-  }
-
-  /// Renders a compass-locked floating AR portal in camera space when the user
-  /// aims within ±35° of the landmark, or a subtle edge radar pill when off-axis.
-  Widget _buildFloatingArPortal({
-    required BuildContext context,
-    required double landmarkAngle,
-    required double distMetres,
-  }) {
-    final bool inCameraFov = landmarkAngle.abs() <= 36.0;
-    final distText = _userPos != null
-        ? BearingService.formatDistance(distMetres)
-        : 'AR Ready';
-
-    if (inCameraFov) {
-      final alignX = (landmarkAngle / 36.0).clamp(-0.78, 0.78);
-      return Positioned(
-        top: MediaQuery.of(context).padding.top + 195,
-        left: 20,
-        right: 146, // Leave room for right-side mini-map
-        child: Align(
-          alignment: Alignment(alignX, 0),
-          child: GestureDetector(
-            onTap: () => _openInteractive3dAr(context),
-            child: AnimatedBuilder(
-              animation: _flowController,
-              builder: (context, child) {
-                final bob = math.sin(_flowController.value * 2 * math.pi) * 4.0;
-                return Transform.translate(
-                  offset: Offset(0, bob),
-                  child: child,
-                );
-              },
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 215),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 13,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0E291E).withValues(alpha: 0.88),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: const Color(0xFF34D399),
-                    width: 1.6,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF34D399).withValues(alpha: 0.32),
-                      blurRadius: 16,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 26,
-                          height: 26,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFD4A853),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.view_in_ar_rounded,
-                            size: 16,
-                            color: Color(0xFF0B1812),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            widget.targetStop.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF34D399),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '✨ Tap to Inspect 3D ($distText)',
-                        style: const TextStyle(
-                          color: Color(0xFF052E16),
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Off-screen edge indicator guiding user to pan toward the landmark
-    final isLeft = landmarkAngle < 0;
-    final deg = landmarkAngle.abs().round();
-    return Positioned(
-      top: MediaQuery.of(context).padding.top + 225,
-      left: isLeft ? 18 : null,
-      right: isLeft ? null : 148,
-      child: GestureDetector(
-        onTap: () => _openInteractive3dAr(context),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0E291E).withValues(alpha: 0.84),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFFD4A853).withValues(alpha: 0.75),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isLeft) ...[
-                const Icon(
-                  Icons.chevron_left_rounded,
-                  color: Color(0xFFD4A853),
-                  size: 18,
-                ),
-                const SizedBox(width: 2),
-              ],
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isLeft ? 'Pan Left $deg° for AR' : 'Pan Right $deg° for AR',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Text(
-                    'or tap to open 3D model',
-                    style: TextStyle(
-                      color: Color(0xFFD4A853),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              if (!isLeft) ...[
-                const SizedBox(width: 2),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Color(0xFFD4A853),
-                  size: 18,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 
