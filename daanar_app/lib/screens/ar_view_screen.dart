@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,6 +77,25 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
       );
 
     _load();
+    _arChannel.setMethodCallHandler((call) async {
+      if (call.method != 'sceneViewerDiagnostic' || !mounted) return;
+      final payload = jsonEncode(call.arguments);
+      debugPrint('Scene Viewer: $payload');
+      try {
+        await _controller.runJavaScript(
+          'window.dispatchEvent(new CustomEvent("daanar-ar-diagnostic", '
+          '{detail: $payload}));',
+        );
+      } catch (error) {
+        debugPrint('Could not display AR diagnostic: $error');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _arChannel.setMethodCallHandler(null);
+    super.dispose();
   }
 
   Uri get _arUrl {
@@ -110,12 +131,14 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
         opened = await _arChannel
                 .invokeMethod<bool>('openSceneViewer', {'uri': url}) ??
             false;
-      } on PlatformException {
-        opened = false;
+      } on PlatformException catch (error) {
+        debugPrint('Scene Viewer launch error: $error; intent=$url');
+        if (mounted) _showError('AR launch failed: ${error.message}\n$url');
+        return NavigationDecision.prevent;
       }
       if (!opened && mounted) {
         _showError(
-          'AR is not available on this device. Make sure "Google Play Services for AR" is installed and up to date.',
+          'AR could not start. Check the AR details on this page for the model URL and download or launch error.',
         );
       }
       return NavigationDecision.prevent;

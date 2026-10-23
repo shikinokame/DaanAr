@@ -420,7 +420,7 @@
         src="{{ $modelUrl }}"
         alt="{{ $landmark->name }} 3D Model"
         ar
-        ar-modes="webxr scene-viewer quick-look"
+        ar-modes="scene-viewer webxr quick-look"
         ar-scale="auto"
         camera-controls
         touch-action="pan-y"
@@ -469,6 +469,12 @@
     </div>
   </div>
 
+  <aside id="ar-diagnostics" role="status" hidden style="position:fixed;z-index:10000;left:12px;right:12px;top:12px;max-height:45vh;overflow:auto;background:#10251b;color:#fff;border:1px solid #D4A853;border-radius:12px;padding:16px;box-shadow:0 4px 24px #0009;">
+    <button type="button" onclick="document.getElementById('ar-diagnostics').hidden = true" style="float:right;padding:4px 10px;">Close</button>
+    <strong>AR details</strong>
+    <pre id="ar-diagnostic-text" style="white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 monospace;margin-top:12px;user-select:text;"></pre>
+  </aside>
+
   <script>
     const viewer = document.querySelector('#landmark-model');
     const loadingOverlay = document.querySelector('#loading-overlay');
@@ -476,8 +482,41 @@
     const loadingStatus = document.querySelector('#loading-status');
     const hintPill = document.querySelector('#hint-pill');
 
+    function showArDiagnostic(detail) {
+      const modelUrl = detail.modelUrl || (viewer && viewer.src) || '(missing)';
+      const text = `${detail.status}: ${detail.message}\nModel URL: ${modelUrl}`;
+      console[detail.status === 'error' ? 'error' : 'info']('DaanAR AR:', text);
+      document.getElementById('ar-diagnostic-text').textContent = text;
+      document.getElementById('ar-diagnostics').hidden = false;
+    }
+
+    // Native download/launch/result diagnostics are forwarded by Flutter.
+    window.addEventListener('daanar-ar-diagnostic', event => showArDiagnostic(event.detail));
+
     if (viewer) {
       let loadHandled = false;
+
+      document.getElementById('ar-button').addEventListener('click', event => {
+        try {
+          const url = new URL(viewer.src, location.href);
+          if (url.protocol !== 'https:' || !/\.glb$/i.test(url.pathname) ||
+              url.username || url.password || url.hash ||
+              url.hostname === 'localhost' || url.hostname.endsWith('.local')) {
+            throw new Error('AR requires a publicly accessible HTTPS .glb URL.');
+          }
+          showArDiagnostic({status: 'launching', message: 'Opening AR viewer. If it closes, native result details will appear here.', modelUrl: url.href});
+        } catch (error) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          showArDiagnostic({status: 'error', message: error.message});
+        }
+      }, true);
+
+      viewer.addEventListener('ar-status', event => {
+        if (event.detail.status === 'failed') {
+          showArDiagnostic({status: 'error', message: 'The AR backend could not start. Check Google Play Services for AR and the model URL. In the app, the native return dialog also offers the Google viewer fallback.'});
+        }
+      });
 
       // Helper: hide overlay once WebGL has actually rendered the first frame
       function revealModel() {
@@ -516,6 +555,7 @@
       // Error handling
       viewer.addEventListener('error', (err) => {
         console.error('3D Model Error:', err);
+        showArDiagnostic({status: 'error', message: `3D model error: ${err.detail?.type || 'unknown'}; ${err.detail?.sourceError?.message || 'No further error details supplied.'}`});
         loadHandled = true; // stop the timeout from overwriting the error
         if (loadingStatus) {
           loadingStatus.innerText = '⚠️ Failed to load 3D model.';

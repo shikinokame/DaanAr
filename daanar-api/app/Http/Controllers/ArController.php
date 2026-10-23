@@ -25,11 +25,17 @@ class ArController extends Controller
         // Demo mode: forced via query param OR no NFT files available
         $demoMode = $request->boolean('demo') || ! $hasNftMarker;
 
-        $baseUrl = $request->getSchemeAndHttpHost();
+        // Railway terminates TLS at its proxy. Always give external AR viewers
+        // HTTPS links in production, even if a forwarded scheme is missing.
+        $baseUrl = app()->environment('production')
+            ? 'https://' . $request->getHttpHost()
+            : $request->getSchemeAndHttpHost();
 
         // Resolve model URL — use uploaded .glb with Scene Viewer cache-buster
         $modelUrl = $landmark->ar_model_url
-            ? $baseUrl . '/storage/' . $landmark->ar_model_url . '?sv=2'
+            ? $baseUrl . '/storage/' . implode('/', array_map(
+                'rawurlencode', explode('/', ltrim($landmark->ar_model_url, '/'))
+            )) . '?sv=3'
             : null;
 
         // Hero image for poster/thumbnail
