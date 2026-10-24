@@ -173,32 +173,94 @@
       transition: opacity 0.5s ease;
     }
 
-    /* ── Big AR Launch Button ── */
-    #ar-button {
-      background: linear-gradient(135deg, #D4A853 0%, #b88d38 100%);
-      color: #0b1812;
-      font-weight: 700;
-      font-size: 15px;
-      border-radius: 28px;
-      border: none;
-      padding: 14px 26px;
+    /* ── Dual AR Launch Action Buttons (Life-Size 1:1 Outdoor & Tabletop Indoor) ── */
+    #ar-actions-container {
       position: absolute;
-      bottom: 110px;
-      left: 50%;
-      transform: translateX(-50%);
-      white-space: nowrap;
+      bottom: 95px;
+      left: 14px;
+      right: 14px;
       display: flex;
-      align-items: center;
       gap: 10px;
-      box-shadow: 0 8px 24px rgba(212, 168, 83, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
-      cursor: pointer;
+      justify-content: center;
+      align-items: stretch;
       z-index: 100;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      pointer-events: none;
     }
 
-    #ar-button:active {
-      transform: translateX(-50%) scale(0.95);
-      box-shadow: 0 4px 12px rgba(212, 168, 83, 0.3);
+    .ar-action-btn {
+      pointer-events: auto;
+      flex: 1;
+      max-width: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 10px 14px;
+      border-radius: 18px;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+      text-decoration: none;
+      user-select: none;
+    }
+
+    .ar-action-btn:active {
+      transform: scale(0.95);
+    }
+
+    .ar-btn-lifesize {
+      background: linear-gradient(135deg, #D4A853 0%, #b88d38 100%);
+      color: #0b1812;
+      box-shadow: 0 6px 20px rgba(212, 168, 83, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .ar-btn-lifesize .btn-title {
+      font-weight: 800;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: -0.2px;
+      white-space: nowrap;
+    }
+
+    .ar-btn-lifesize .btn-sub {
+      font-size: 10px;
+      font-weight: 700;
+      opacity: 0.85;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .ar-btn-tabletop {
+      background: rgba(11, 24, 18, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(212, 168, 83, 0.45);
+      color: #ffffff;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    }
+
+    .ar-btn-tabletop .btn-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: -0.2px;
+      white-space: nowrap;
+    }
+
+    .ar-btn-tabletop .btn-sub {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
     }
 
     /* ── Dedicated Loading Screen for 3D Assets ── */
@@ -435,15 +497,29 @@
         min-camera-orbit="auto auto 5%"
         max-camera-orbit="auto auto 300%">
 
-        <!-- AR Button -->
-        <button slot="ar-button" id="ar-button">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-            <path d="m3.3 7 8.7 5 8.7-5"/>
-            <path d="M12 22V12"/>
-          </svg>
-          View in your Space (AR)
-        </button>
+        <!-- Dual AR Action Buttons (Life-Size 1:1 Outdoor & Tabletop Indoor) -->
+        <div slot="ar-button" id="ar-actions-container">
+          <button type="button" class="ar-action-btn ar-btn-lifesize" onclick="launchArMode('fixed', event)" title="View at 1:1 actual architectural scale outdoors">
+            <div class="btn-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M9 9h.01M15 9h.01M9 13h.01M15 13h.01"/>
+              </svg>
+              Life-Size (1:1)
+            </div>
+            <span class="btn-sub">Walk-Through Outdoor</span>
+          </button>
+
+          <button type="button" class="ar-action-btn ar-btn-tabletop" onclick="launchArMode('auto', event)" title="View scaled miniature model on tabletop or floor">
+            <div class="btn-title">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+                <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
+              </svg>
+              Tabletop Mode
+            </div>
+            <span class="btn-sub">Miniature Indoor</span>
+          </button>
+        </div>
 
       </model-viewer>
     @else
@@ -496,24 +572,47 @@
     // Native download/launch/result diagnostics are forwarded by Flutter.
     window.addEventListener('daanar-ar-diagnostic', event => showArDiagnostic(event.detail));
 
+    function launchArMode(scaleMode, event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
+      if (!viewer) return;
+
+      try {
+        const url = new URL(viewer.src, location.href);
+        if (url.protocol !== 'https:' || !/\.glb$/i.test(url.pathname) ||
+            url.username || url.password || url.hash ||
+            url.hostname === 'localhost' || url.hostname.endsWith('.local')) {
+          throw new Error('AR requires a publicly accessible HTTPS .glb URL.');
+        }
+        showArDiagnostic({
+          status: 'launching',
+          message: `Opening AR in ${scaleMode === 'fixed' ? 'Life-Size (1:1)' : 'Tabletop'} mode...`,
+          modelUrl: url.href
+        });
+      } catch (error) {
+        showArDiagnostic({status: 'error', message: error.message});
+        return;
+      }
+
+      viewer.setAttribute('ar-scale', scaleMode);
+      viewer.arScale = scaleMode;
+
+      // Give model-viewer a moment to apply the updated scale before launching
+      setTimeout(() => {
+        try {
+          viewer.activateAR();
+        } catch (e) {
+          console.error('activateAR failed:', e);
+          showArDiagnostic({status: 'error', message: 'Failed to launch AR: ' + (e.message || e)});
+        }
+      }, 40);
+    }
+
     if (viewer) {
       let loadHandled = false;
-
-      document.getElementById('ar-button').addEventListener('click', event => {
-        try {
-          const url = new URL(viewer.src, location.href);
-          if (url.protocol !== 'https:' || !/\.glb$/i.test(url.pathname) ||
-              url.username || url.password || url.hash ||
-              url.hostname === 'localhost' || url.hostname.endsWith('.local')) {
-            throw new Error('AR requires a publicly accessible HTTPS .glb URL.');
-          }
-          showArDiagnostic({status: 'launching', message: 'Opening AR viewer. If it closes, native result details will appear here.', modelUrl: url.href});
-        } catch (error) {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          showArDiagnostic({status: 'error', message: error.message});
-        }
-      }, true);
 
       viewer.addEventListener('ar-status', event => {
         if (event.detail.status === 'failed') {
