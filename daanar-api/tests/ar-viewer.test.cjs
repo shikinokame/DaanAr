@@ -36,7 +36,7 @@ test('public HTTPS GLB with nested query is left intact for model-viewer', () =>
   const url = 'https://cdn.example.com/a%20b.glb?token=a%2Bb&sv=3';
   const p = page(url);
   assert.equal(p.click(), false);
-  assert.ok(p.nodes['ar-diagnostic-text'].textContent.includes(url));
+  assert.equal(p.nodes['ar-diagnostics'].hidden, true);
 });
 
 test('invalid model schemes and local URLs are blocked with visible details', () => {
@@ -48,16 +48,24 @@ test('invalid model schemes and local URLs are blocked with visible details', ()
   }
 });
 
-test('native errors and activity results render exact details as text', () => {
+test('native errors render exact details as text', () => {
   const p = page('https://example.com/a.glb');
-  const detail = {status: 'returned', message: 'resultCode=0; <error>', modelUrl: 'https://example.com/a.glb?sv=3&x=4'};
+  const detail = {status: 'error', message: 'HTTP 404; <error>', modelUrl: 'https://example.com/a.glb?sv=3&x=4'};
   p.events['daanar-ar-diagnostic']({detail});
-  assert.equal(p.nodes['ar-diagnostic-text'].textContent, 'returned: resultCode=0; <error>\nModel URL: https://example.com/a.glb?sv=3&x=4');
+  assert.equal(p.nodes['ar-diagnostic-text'].textContent, 'error: HTTP 404; <error>\nModel URL: https://example.com/a.glb?sv=3&x=4');
   assert.equal(p.nodes['ar-diagnostics'].hidden, false);
 });
 
-test('AR backend failure displays fallback advice', () => {
+test('returning from native AR does not cover the preview with a diagnostic', () => {
+  const p = page('https://example.com/a.glb');
+  for (const status of ['checking', 'launched', 'returned']) {
+    p.events['daanar-ar-diagnostic']({detail: {status, message: 'resultCode=0'}});
+    assert.equal(p.nodes['ar-diagnostics'].hidden, true);
+  }
+});
+
+test('AR backend failure displays recovery advice', () => {
   const p = page('https://example.com/a.glb');
   p.events['ar-status']({detail: {status: 'failed'}});
-  assert.ok(p.nodes['ar-diagnostic-text'].textContent.includes('Google viewer fallback'));
+  assert.ok(p.nodes['ar-diagnostic-text'].textContent.includes('Google Play Services for AR'));
 });

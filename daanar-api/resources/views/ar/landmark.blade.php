@@ -486,6 +486,9 @@
       const modelUrl = detail.modelUrl || (viewer && viewer.src) || '(missing)';
       const text = `${detail.status}: ${detail.message}\nModel URL: ${modelUrl}`;
       console[detail.status === 'error' ? 'error' : 'info']('DaanAR AR:', text);
+      // Successful handoffs and returning with Back are not errors. Keep the
+      // preview clear; technical details are useful only for actual failures.
+      if (detail.status !== 'error') return;
       document.getElementById('ar-diagnostic-text').textContent = text;
       document.getElementById('ar-diagnostics').hidden = false;
     }
@@ -514,7 +517,7 @@
 
       viewer.addEventListener('ar-status', event => {
         if (event.detail.status === 'failed') {
-          showArDiagnostic({status: 'error', message: 'The AR backend could not start. Check Google Play Services for AR and the model URL. In the app, the native return dialog also offers the Google viewer fallback.'});
+          showArDiagnostic({status: 'error', message: 'AR could not start. Check that Google and Google Play Services for AR are installed and enabled, then try again.'});
         }
       });
 
