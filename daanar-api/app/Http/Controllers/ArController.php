@@ -31,11 +31,11 @@ class ArController extends Controller
             ? 'https://' . $request->getHttpHost()
             : $request->getSchemeAndHttpHost();
 
-        // Resolve model URL — use uploaded .glb with Scene Viewer cache-buster
+        // Resolve model URL — use path-based cache-buster (/storage/ar-models/v8_<ts>/<file>.glb)
+        // because MainActivity.kt calls .clearQuery() which strips ?sv= query strings.
+        $version = 'v8_' . ($landmark->updated_at?->timestamp ?? 0);
         $modelUrl = $landmark->ar_model_url
-            ? $baseUrl . '/storage/' . implode('/', array_map(
-                'rawurlencode', explode('/', ltrim($landmark->ar_model_url, '/'))
-            )) . '?sv=4_' . ($landmark->updated_at?->timestamp ?? 0)
+            ? $baseUrl . '/storage/ar-models/' . $version . '/' . rawurlencode(basename($landmark->ar_model_url))
             : null;
 
         // Hero image for poster/thumbnail

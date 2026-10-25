@@ -11,6 +11,19 @@ Route::get('/', [LandingController::class, 'index']);
 // WebAR experience — opened via WebView in Flutter
 Route::get('/ar/landmark/{id}', [ArController::class, 'show'])->name('ar.landmark');
 
+// Path-based cache-buster for Google Scene Viewer (MainActivity.kt calls .clearQuery(),
+// stripping ?sv= query strings and causing Scene Viewer to serve stale cached .glb files).
+Route::get('/storage/ar-models/{version}/{filename}', function (string $version, string $filename) {
+    $safeFile = basename($filename);
+    $fullPath = storage_path('app/public/landmarks/models/' . $safeFile);
+    abort_unless(is_file($fullPath) && str_ends_with(strtolower($safeFile), '.glb'), 404);
+
+    return response()->file($fullPath, [
+        'Content-Type' => 'model/gltf-binary',
+        'Cache-Control' => 'public, max-age=86400',
+    ]);
+})->where('filename', '.*\.glb');
+
 // Standalone AR test page (no landmark data, just verifies camera + A-Frame work)
 Route::get('/ar/test', function () {
     return view('ar.test');
