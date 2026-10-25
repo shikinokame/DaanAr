@@ -1,6 +1,8 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../core/constants.dart';
 import '../core/theme.dart';
@@ -8,11 +10,11 @@ import '../services/landmark_service.dart';
 
 /// Shows the 3D / AR landmark page inside the app (no Chrome redirect).
 ///
-/// The page is rendered in an in-app WebView. When the user taps
-/// "View in your Space (AR)", `<model-viewer>` asks to open Google Scene Viewer
-/// through an `intent://` URL. We catch that URL and open Scene Viewer
-/// natively (see MainActivity.kt). It shows on top of DaanAR, and pressing
-/// Back returns straight to this screen.
+/// The page is rendered in a transparent in-app WebView. When the user taps
+/// "View in your Space (AR)", the WebView notifies Flutter over the `DaanAR`
+/// JavaScriptChannel (`camera_on` / `camera_off`) and Flutter renders a live
+/// rear `CameraPreview` directly behind the `<model-viewer>` 3D stage for
+/// instant markerless placement with zero external Google App handoff.
 class ARViewScreen extends ConsumerStatefulWidget {
   final int landmarkId;
   final String landmarkName;
@@ -31,6 +33,8 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
   static const _arChannel = MethodChannel('ph.daanar/ar');
 
   late final WebViewController _controller;
+  CameraController? _cameraController;
+  bool _nativeCameraActive = false;
   bool _loading = true;
   String? _error;
 
@@ -45,19 +49,34 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
           verificationMethod: 'REMOTE',
         );
 
-    _controller = WebViewController()
+    _controller = WebViewController(
+      onPermissionRequest: (WebViewPermissionRequest request) {
+        request.grant();
+      },
+    )
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
+      ..setBackgroundColor(Colors.transparent)
       ..addJavaScriptChannel('DaanAR', onMessageReceived: (msg) {
-        if (msg.message == 'close' && mounted) Navigator.of(context).maybePop();
+        if (!mounted) return;
+        switch (msg.message) {
+          case 'close':
+            Navigator.of(context).maybePop();
+            break;
+          case 'camera_on':
+            _enableNativeCamera();
+            break;
+          case 'camera_off':
+            _disableNativeCamera();
+            break;
+        }
       })
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: _onNavigationRequest,
           onPageFinished: (_) async {
-            // The page's own back button calls history.back(), which does
-            // nothing in a WebView with no history, so route it to Flutter.
+            // Route history.back() to Flutter and advertise native camera support.
             await _controller.runJavaScript(
+              "window.__daanarNativeCamera = true; "
               "window.history.back = function(){ DaanAR.postMessage('close'); };",
             );
             if (mounted) setState(() => _loading = false);
@@ -75,6 +94,61 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
       );
 
     _load();
+  }
+
+  Future<void> _enableNativeCamera() async {
+    try {
+      final status = await Permission.camera.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          _showError('Camera permission is required for View in your Space (AR).');
+        }
+        return;
+      }
+
+      if (_cameraController == null || !_cameraController!.value.isInitialized) {
+        final cameras = await availableCameras();
+        if (cameras.isEmpty) return;
+        final backCamera = cameras.firstWhere(
+          (c) => c.lensDirection == CameraLensDirection.back,
+          orElse: () => cameras.first,
+        );
+        final controller = CameraController(
+          backCamera,
+          ResolutionPreset.high,
+          enableAudio: false,
+        );
+        await controller.initialize();
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        _cameraController = controller;
+      }
+
+      if (mounted) {
+        setState(() => _nativeCameraActive = true);
+      }
+    } catch (e) {
+      debugPrint('Failed to start native AR camera: $e');
+    }
+  }
+
+  Future<void> _disableNativeCamera() async {
+    if (mounted) {
+      setState(() => _nativeCameraActive = false);
+    }
+    final ctrl = _cameraController;
+    _cameraController = null;
+    if (ctrl != null) {
+      await ctrl.dispose();
+    }
+  }
+
+  @override
+  void dispose() {
+    _cameraController?.dispose();
+    super.dispose();
   }
 
   Uri get _arUrl {
@@ -140,7 +214,19 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Stack(
+          fit: StackFit.expand,
           children: [
+            if (_nativeCameraActive &&
+                _cameraController != null &&
+                _cameraController!.value.isInitialized)
+              FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _cameraController!.value.previewSize!.height,
+                  height: _cameraController!.value.previewSize!.width,
+                  child: CameraPreview(_cameraController!),
+                ),
+              ),
             if (_error == null) WebViewWidget(controller: _controller),
             if (_loading && _error == null)
               const Center(

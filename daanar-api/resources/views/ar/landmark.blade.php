@@ -35,6 +35,28 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       background: radial-gradient(circle at 50% 40%, #173628 0%, #08140e 100%);
       color: var(--text);
+      transition: background 0.25s ease;
+    }
+
+    body.ar-camera-active,
+    html.ar-camera-active {
+      background: transparent !important;
+    }
+
+    /* ── Live Rear Camera Video Layer (WebRTC) ── */
+    #ar-camera-video {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+      display: none;
+      pointer-events: none;
+    }
+
+    body.ar-camera-active #ar-camera-video.stream-ready {
+      display: block;
     }
 
     #viewer-container {
@@ -42,6 +64,41 @@
       height: 100%;
       position: relative;
       overflow: hidden;
+      z-index: 10;
+    }
+
+    /* ── Movable / Scalable AR Stage Wrapper ── */
+    #ar-stage-wrapper {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-origin: 50% 62%;
+      will-change: transform;
+    }
+
+    /* ── 3D Perspective Floor Grid & Reticle for Instant Placement ── */
+    #ar-ground-reticle {
+      position: absolute;
+      left: 50%;
+      top: 64%;
+      width: 260px;
+      height: 260px;
+      transform: translate(-50%, -50%) rotateX(72deg);
+      border-radius: 50%;
+      border: 2.5px dashed rgba(212, 168, 83, 0.85);
+      background:
+        radial-gradient(circle, rgba(212, 168, 83, 0.22) 0%, rgba(27, 67, 50, 0.18) 55%, transparent 72%),
+        repeating-linear-gradient(0deg, transparent, transparent 22px, rgba(212, 168, 83, 0.22) 23px),
+        repeating-linear-gradient(90deg, transparent, transparent 22px, rgba(212, 168, 83, 0.22) 23px);
+      box-shadow: 0 0 32px rgba(212, 168, 83, 0.35), inset 0 0 24px rgba(212, 168, 83, 0.25);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      z-index: 4;
+    }
+
+    body.ar-camera-active:not(.ar-locked) #ar-ground-reticle {
+      opacity: 1;
     }
 
     model-viewer {
@@ -49,6 +106,8 @@
       height: 100%;
       background: transparent;
       outline: none;
+      position: relative;
+      z-index: 5;
       --progress-bar-color: transparent;
       --progress-mask: transparent;
     }
@@ -193,12 +252,118 @@
       box-shadow: 0 8px 24px rgba(212, 168, 83, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
       cursor: pointer;
       z-index: 100;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
     }
 
     #ar-button:active {
       transform: translateX(-50%) scale(0.95);
       box-shadow: 0 4px 12px rgba(212, 168, 83, 0.3);
+    }
+
+    body.ar-camera-active #ar-button,
+    body.ar-camera-active .info-card {
+      display: none !important;
+    }
+
+    /* ── Drag-to-Place Floor Handle in Live AR Mode ── */
+    #ar-move-handle {
+      position: absolute;
+      left: 50%;
+      top: 73%;
+      transform: translate(-50%, -50%);
+      background: rgba(11, 24, 18, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1.5px solid var(--accent);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 22px;
+      display: none;
+      align-items: center;
+      gap: 7px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+      z-index: 80;
+      touch-action: none;
+      user-select: none;
+      cursor: grab;
+    }
+
+    body.ar-camera-active:not(.ar-locked) #ar-move-handle {
+      display: inline-flex;
+    }
+
+    /* ── Live AR Bottom HUD Controls ── */
+    #ar-live-hud {
+      position: absolute;
+      bottom: 20px;
+      left: 14px;
+      right: 14px;
+      background: rgba(11, 24, 18, 0.88);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(212, 168, 83, 0.4);
+      border-radius: 22px;
+      padding: 12px 16px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 110;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+    }
+
+    body.ar-camera-active #ar-live-hud {
+      display: flex;
+    }
+
+    .ar-scale-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .ar-scale-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+      height: 6px;
+      cursor: pointer;
+    }
+
+    .ar-hud-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .ar-hud-btn {
+      flex: 1;
+      background: rgba(27, 67, 50, 0.9);
+      border: 1px solid rgba(212, 168, 83, 0.35);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 9px 10px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+
+    .ar-hud-btn.active {
+      background: var(--accent);
+      color: #0b1812;
+      border-color: var(--accent);
+    }
+
+    .ar-hud-btn.exit-btn {
+      background: rgba(180, 45, 45, 0.9);
+      border-color: rgba(255, 120, 120, 0.45);
+      color: #fff;
     }
 
     /* ── Dedicated Loading Screen for 3D Assets ── */
@@ -358,10 +523,13 @@
 </head>
 <body>
 
+  <!-- Live Rear Camera Video Feed for In-App AR Mode -->
+  <video id="ar-camera-video" autoplay playsinline muted></video>
+
   <div id="viewer-container">
     <!-- Top Nav Header -->
     <div class="top-bar">
-      <button class="top-btn" onclick="window.history.back()" title="Back">
+      <button class="top-btn" onclick="handleBackBtn()" title="Back">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
@@ -400,7 +568,7 @@
         <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8Z"/>
         <path d="M12 6v6l4 2"/>
       </svg>
-      <span>Drag to rotate • Pinch to zoom</span>
+      <span id="hint-text">Drag to rotate • Pinch to zoom</span>
     </div>
 
     @if($modelUrl)
@@ -414,38 +582,72 @@
         </div>
       </div>
 
-      <!-- Google 3D & Markerless Surface AR Model Viewer -->
-      <model-viewer
-        id="landmark-model"
-        src="{{ $modelUrl }}"
-        alt="{{ $landmark->name }} 3D Model"
-        ar
-        ar-modes="scene-viewer webxr quick-look"
-        ar-scale="auto"
-        camera-controls
-        touch-action="pan-y"
-        interaction-prompt="none"
-        auto-rotate
-        rotation-per-second="25deg"
-        shadow-intensity="1.2"
-        shadow-softness="0.7"
-        exposure="1.0"
-        bounds="tight"
-        camera-orbit="0deg 75deg auto"
-        min-camera-orbit="auto auto 5%"
-        max-camera-orbit="auto auto 300%">
+      <!-- Movable / Scalable AR Stage Wrapper -->
+      <div id="ar-stage-wrapper">
+        <div id="ar-ground-reticle"></div>
 
-        <!-- AR Button -->
-        <button slot="ar-button" id="ar-button">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-            <path d="m3.3 7 8.7 5 8.7-5"/>
-            <path d="M12 22V12"/>
-          </svg>
-          View in your Space (AR)
-        </button>
+        <!-- Google 3D & Markerless Surface AR Model Viewer -->
+        <model-viewer
+          id="landmark-model"
+          src="{{ $modelUrl }}"
+          alt="{{ $landmark->name }} 3D Model"
+          ar
+          ar-modes="webxr scene-viewer quick-look"
+          ar-scale="auto"
+          camera-controls
+          touch-action="none"
+          interaction-prompt="none"
+          auto-rotate
+          rotation-per-second="25deg"
+          shadow-intensity="1.4"
+          shadow-softness="0.6"
+          exposure="1.0"
+          bounds="tight"
+          camera-orbit="0deg 75deg auto"
+          min-camera-orbit="auto auto 5%"
+          max-camera-orbit="auto auto 300%">
+        </model-viewer>
+      </div>
 
-      </model-viewer>
+      <!-- Instant In-App AR Launch Button -->
+      <button type="button" id="ar-button" onclick="enterLiveArMode()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+          <path d="m3.3 7 8.7 5 8.7-5"/>
+          <path d="M12 22V12"/>
+        </svg>
+        View in your Space (AR)
+      </button>
+
+      <!-- Drag Handle to Move Model Across the Floor in Live AR -->
+      <div id="ar-move-handle">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/>
+          <polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/>
+          <line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/>
+        </svg>
+        <span>Drag here to position on floor</span>
+      </div>
+
+      <!-- Live AR Bottom HUD Controls -->
+      <div id="ar-live-hud">
+        <div class="ar-scale-row">
+          <span>Scale</span>
+          <input type="range" id="ar-scale-slider" min="0.4" max="3.0" step="0.05" value="1.0" oninput="onArScaleChange(this.value)">
+          <span id="ar-scale-label" style="min-width: 38px; text-align: right;">1.0x</span>
+        </div>
+        <div class="ar-hud-actions">
+          <button type="button" class="ar-hud-btn" id="ar-lock-btn" onclick="toggleArLock()">
+            📌 Lock Place
+          </button>
+          <button type="button" class="ar-hud-btn" onclick="recenterArStage()">
+            🎯 Recenter
+          </button>
+          <button type="button" class="ar-hud-btn exit-btn" onclick="exitLiveArMode()">
+            ✕ Exit AR
+          </button>
+        </div>
+      </div>
     @else
       <div class="no-model-box">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -498,22 +700,6 @@
 
     if (viewer) {
       let loadHandled = false;
-
-      document.getElementById('ar-button').addEventListener('click', event => {
-        try {
-          const url = new URL(viewer.src, location.href);
-          if (url.protocol !== 'https:' || !/\.glb$/i.test(url.pathname) ||
-              url.username || url.password || url.hash ||
-              url.hostname === 'localhost' || url.hostname.endsWith('.local')) {
-            throw new Error('AR requires a publicly accessible HTTPS .glb URL.');
-          }
-          showArDiagnostic({status: 'launching', message: 'Opening AR viewer. If it closes, native result details will appear here.', modelUrl: url.href});
-        } catch (error) {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          showArDiagnostic({status: 'error', message: error.message});
-        }
-      }, true);
 
       viewer.addEventListener('ar-status', event => {
         if (event.detail.status === 'failed') {
@@ -618,6 +804,194 @@
       } else {
         document.exitFullscreen().catch(() => {});
       }
+    }
+
+    // =========================================================
+    // IN-APP LIVE CAMERA AR (INSTANT PLACEMENT)
+    // =========================================================
+    let arActive = false;
+    let arLocked = false;
+    let arScale = 1.0;
+    let arOffsetX = 0;
+    let arOffsetY = 0;
+    let cameraStream = null;
+
+    const arCameraVideo = document.getElementById('ar-camera-video');
+    const arStageWrapper = document.getElementById('ar-stage-wrapper');
+    const arMoveHandle = document.getElementById('ar-move-handle');
+    const arScaleSlider = document.getElementById('ar-scale-slider');
+    const arScaleLabel = document.getElementById('ar-scale-label');
+    const arLockBtn = document.getElementById('ar-lock-btn');
+    const hintText = document.getElementById('hint-text');
+
+    function updateArStageTransform() {
+      if (!arStageWrapper) return;
+      arStageWrapper.style.transform = `translate3d(${arOffsetX}px, ${arOffsetY}px, 0) scale(${arScale})`;
+    }
+
+    async function enterLiveArMode() {
+      if (!viewer) return;
+
+      arActive = true;
+      arLocked = false;
+      document.documentElement.classList.add('ar-camera-active');
+      document.body.classList.add('ar-camera-active');
+      document.body.classList.remove('ar-locked');
+      if (arLockBtn) {
+        arLockBtn.classList.remove('active');
+        arLockBtn.innerHTML = '📌 Lock Place';
+      }
+
+      // Pause auto-rotation and set a realistic standing eye-level angle
+      viewer.autoRotate = false;
+      const rotateBtn = document.querySelector('#rotate-btn');
+      if (rotateBtn) rotateBtn.classList.remove('active');
+      viewer.cameraOrbit = '0deg 72deg auto';
+
+      if (hintText) {
+        hintText.innerText = '1-finger rotate • Drag pill below to move on floor';
+      }
+      if (hintPill) {
+        hintPill.style.opacity = '1';
+        setTimeout(() => { if (arActive) hintPill.style.opacity = '0'; }, 4500);
+      }
+
+      // 1) If running inside updated DaanAR Flutter WebView with native CameraPreview support
+      if (window.__daanarNativeCamera && window.DaanAR) {
+        window.DaanAR.postMessage('camera_on');
+        return;
+      }
+
+      // 2) Standard WebRTC rear camera stream right inside the page
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 }
+            },
+            audio: false
+          });
+          if (arCameraVideo) {
+            arCameraVideo.srcObject = cameraStream;
+            await arCameraVideo.play().catch(() => {});
+            arCameraVideo.classList.add('stream-ready');
+          }
+          return;
+        } catch (err) {
+          console.warn('WebRTC rear camera unavailable or blocked by WebView:', err);
+          // Fallback: notify Flutter channel if present
+          if (window.DaanAR) {
+            window.DaanAR.postMessage('camera_on');
+          }
+        }
+      }
+    }
+
+    function exitLiveArMode() {
+      arActive = false;
+      arLocked = false;
+
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+      }
+      if (arCameraVideo) {
+        arCameraVideo.srcObject = null;
+        arCameraVideo.classList.remove('stream-ready');
+      }
+      if (window.DaanAR) {
+        window.DaanAR.postMessage('camera_off');
+      }
+
+      document.documentElement.classList.remove('ar-camera-active');
+      document.body.classList.remove('ar-camera-active', 'ar-locked');
+
+      // Reset stage position & scale
+      arScale = 1.0;
+      arOffsetX = 0;
+      arOffsetY = 0;
+      if (arScaleSlider) arScaleSlider.value = '1.0';
+      if (arScaleLabel) arScaleLabel.innerText = '1.0x';
+      if (arStageWrapper) arStageWrapper.style.transform = '';
+
+      if (hintText) {
+        hintText.innerText = 'Drag to rotate • Pinch to zoom';
+      }
+    }
+
+    function handleBackBtn() {
+      if (arActive) {
+        exitLiveArMode();
+      } else {
+        window.history.back();
+      }
+    }
+
+    function onArScaleChange(val) {
+      arScale = parseFloat(val) || 1.0;
+      if (arScaleLabel) {
+        arScaleLabel.innerText = arScale.toFixed(1) + 'x';
+      }
+      updateArStageTransform();
+    }
+
+    function toggleArLock() {
+      if (!arActive) return;
+      arLocked = !arLocked;
+      document.body.classList.toggle('ar-locked', arLocked);
+      if (arLockBtn) {
+        arLockBtn.classList.toggle('active', arLocked);
+        arLockBtn.innerHTML = arLocked ? '🔒 Locked' : '📌 Lock Place';
+      }
+    }
+
+    function recenterArStage() {
+      arOffsetX = 0;
+      arOffsetY = 0;
+      arScale = 1.0;
+      if (arScaleSlider) arScaleSlider.value = '1.0';
+      if (arScaleLabel) arScaleLabel.innerText = '1.0x';
+      updateArStageTransform();
+      resetCamera();
+    }
+
+    // Drag-to-move floor placement handle
+    if (arMoveHandle) {
+      let dragging = false;
+      let startX = 0;
+      let startY = 0;
+      let initialOffsetX = 0;
+      let initialOffsetY = 0;
+
+      arMoveHandle.addEventListener('pointerdown', (e) => {
+        if (!arActive || arLocked) return;
+        dragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        initialOffsetX = arOffsetX;
+        initialOffsetY = arOffsetY;
+        arMoveHandle.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      });
+
+      arMoveHandle.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        arOffsetX = Math.max(-window.innerWidth * 0.42, Math.min(window.innerWidth * 0.42, initialOffsetX + dx));
+        arOffsetY = Math.max(-window.innerHeight * 0.35, Math.min(window.innerHeight * 0.35, initialOffsetY + dy));
+        updateArStageTransform();
+      });
+
+      const endDrag = (e) => {
+        if (!dragging) return;
+        dragging = false;
+        try { arMoveHandle.releasePointerCapture(e.pointerId); } catch (_) {}
+      };
+      arMoveHandle.addEventListener('pointerup', endDrag);
+      arMoveHandle.addEventListener('pointercancel', endDrag);
     }
   </script>
 </body>
