@@ -35,7 +35,7 @@ class ArController extends Controller
         $modelUrl = $landmark->ar_model_url
             ? $baseUrl . '/storage/' . implode('/', array_map(
                 'rawurlencode', explode('/', ltrim($landmark->ar_model_url, '/'))
-            )) . '?sv=3'
+            )) . '?sv=4_' . ($landmark->updated_at?->timestamp ?? 0)
             : null;
 
         // Hero image for poster/thumbnail
