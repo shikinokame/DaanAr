@@ -243,13 +243,24 @@ class DaanArSeeder extends Seeder
             $municipalityName = $landmark['municipality'];
             unset($landmark['municipality']);
 
-            $lm = Landmark::updateOrCreate(
-                ['name' => $landmark['name']],
-                [
-                    ...$landmark,
-                    'municipality_id' => $municipalities[$municipalityName]->id,
-                ]
-            );
+            $lm = Landmark::firstOrNew(['name' => $landmark['name']]);
+
+            // Media files (3D models / hero images) are managed by admins in the
+            // Filament panel. This seeder runs on EVERY deploy (`db:seed --force`),
+            // so never overwrite media on an existing landmark — otherwise each
+            // redeploy reverts admin uploads back to the seeded file paths.
+            if ($lm->exists) {
+                foreach (['ar_model_url', 'hero_image'] as $mediaField) {
+                    if (!empty($lm->{$mediaField})) {
+                        unset($landmark[$mediaField]);
+                    }
+                }
+            }
+
+            $lm->fill([
+                ...$landmark,
+                'municipality_id' => $municipalities[$municipalityName]->id,
+            ])->save();
             $landmarkModels->put($lm->name, $lm);
         }
 
