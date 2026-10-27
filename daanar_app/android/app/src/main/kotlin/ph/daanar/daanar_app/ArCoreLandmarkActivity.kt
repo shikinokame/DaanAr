@@ -656,7 +656,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             if (assetList.contains(name)) {
                 Log.i(TAG, "Loading bundled offline asset: models/$name")
                 assets.open("models/$name").use { input ->
-                    return Pair(patchGlbForTrueOriginalColors(input.readBytes()), "OFFLINE READY")
+                    return Pair(patchGlbToMattePbr(input.readBytes()), "OFFLINE READY")
                 }
             }
         }
@@ -667,7 +667,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             val cachedFile = File(cacheDir, name)
             if (cachedFile.exists() && cachedFile.length() > 1024) {
                 Log.i(TAG, "Loading locally cached model: ${cachedFile.absolutePath}")
-                return Pair(patchGlbForTrueOriginalColors(cachedFile.readBytes()), "CACHED OFFLINE")
+                return Pair(patchGlbToMattePbr(cachedFile.readBytes()), "CACHED OFFLINE")
             }
         }
 
@@ -687,7 +687,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                     }
                 }
                 if (targetFile.exists() && targetFile.length() > 1024) {
-                    return Pair(patchGlbForTrueOriginalColors(targetFile.readBytes()), "SYNCED FOR OFFLINE")
+                    return Pair(patchGlbToMattePbr(targetFile.readBytes()), "SYNCED FOR OFFLINE")
                 }
             } catch (netErr: Exception) {
                 Log.w(TAG, "Network download failed, falling back to any bundled asset", netErr)
@@ -697,7 +697,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         // 4. Final fallback: if URL had a new filename and user is offline, use mapped asset for this landmarkId
         if (mappedFileName.isNotEmpty() && assetList.contains(mappedFileName)) {
             assets.open("models/$mappedFileName").use { input ->
-                return Pair(patchGlbForTrueOriginalColors(input.readBytes()), "OFFLINE READY")
+                return Pair(patchGlbToMattePbr(input.readBytes()), "OFFLINE READY")
             }
         }
 
@@ -705,12 +705,11 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
     }
 
     /**
-     * Ensures any `.glb` binary (bundled or freshly downloaded from an admin upload) uses the
-     * glTF 2.0 `KHR_materials_unlit` extension and strips `metallicRoughnessTexture` so Google
-     * Filament renders the exact, 100% original unshaded `baseColorTexture` colors in both
-     * 3D Studio View and View in your Space (AR) without ever turning dark or over-exposed.
+     * Ensures any `.glb` binary (bundled or freshly downloaded from an admin upload) uses standard
+     * glTF 2.0 matte PBR (`metallicFactor = 0.0`, `roughnessFactor = 0.85`, keeping `normalTexture`
+     * intact and WITHOUT `KHR_materials_unlit`, which causes Filament ubershader errors).
      */
-    private fun patchGlbForTrueOriginalColors(glb: ByteArray): ByteArray {
+    private fun patchGlbToMattePbr(glb: ByteArray): ByteArray {
         try {
             if (glb.size < 28) return glb
             val headerBuf = ByteBuffer.wrap(glb, 0, 20).order(java.nio.ByteOrder.LITTLE_ENDIAN)
@@ -726,35 +725,21 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             val jsonStr = String(glb, 20, jsonLen, Charsets.UTF_8)
             val root = org.json.JSONObject(jsonStr)
 
-            // Add KHR_materials_unlit to extensionsUsed
-            val extUsed = root.optJSONArray("extensionsUsed") ?: org.json.JSONArray()
-            var hasUnlit = false
-            for (i in 0 until extUsed.length()) {
-                if (extUsed.optString(i) == "KHR_materials_unlit") {
-                    hasUnlit = true
-                    break
-                }
-            }
-            if (!hasUnlit) {
-                extUsed.put("KHR_materials_unlit")
-                root.put("extensionsUsed", extUsed)
-            }
+            // Strip KHR_materials_unlit if present so Filament always uses its standard PBR ubershader
+            root.remove("extensionsUsed")
+            root.remove("extensionsRequired")
 
-            // Patch each material to unlit + metallicFactor=0
             val materials = root.optJSONArray("materials")
             if (materials != null) {
                 for (i in 0 until materials.length()) {
                     val mat = materials.optJSONObject(i) ?: continue
-                    mat.remove("normalTexture")
+                    mat.remove("extensions")
                     val pbr = mat.optJSONObject("pbrMetallicRoughness")
                     if (pbr != null) {
                         pbr.remove("metallicRoughnessTexture")
                         pbr.put("metallicFactor", 0.0)
-                        pbr.put("roughnessFactor", 1.0)
+                        pbr.put("roughnessFactor", 0.85)
                     }
-                    val matExt = mat.optJSONObject("extensions") ?: org.json.JSONObject()
-                    matExt.put("KHR_materials_unlit", org.json.JSONObject())
-                    mat.put("extensions", matExt)
                 }
             }
 
@@ -784,7 +769,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             System.arraycopy(glb, binOffset, out, 20 + newJsonBytes.size, binLen)
             return out
         } catch (e: Exception) {
-            Log.w(TAG, "GLB color patch skipped: ${e.message}")
+            Log.w(TAG, "GLB matte PBR patch skipped: ${e.message}")
             return glb
         }
     }
@@ -807,9 +792,10 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            // Balanced natural exposure so 3D Studio View is never over-bright or washed out
-            indirectLight?.intensity = 28_000f
-            mainLightNode?.intensity = 75_000f
+            // Natural neutral studio lighting (toned down so 3D Studio is not overly bright)
+            indirectLight?.intensity = 30_000f
+            mainLightNode?.intensity = 68_000f
+            mainLightNode?.lightDirection = Float3(0.0f, -0.35f, -1.0f)
         }
         viewerStageContainer.addView(sceneView)
         studioSceneView = sceneView
@@ -963,11 +949,17 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             planeRenderer.isEnabled = true
             planeRenderer.isVisible = true
 
-            // Keep natural studio daylight IBL & directional lighting instead of letting
-            // indoor camera light estimation darken the 3D landmark textures!
+            // CRITICAL FIX: By default, ARSceneView creates an empty AR Environment with
+            // `indirectLight = null` (expecting ARCore LightEstimator to fill it).
+            // By loading `SceneView.createEnvironment(environmentLoader, isOpaque = false)`,
+            // ARSceneView receives the exact same `"environments/neutral/neutral_ibl.ktx"`
+            // studio image-based lighting as the 3D Studio Preview while keeping a transparent
+            // skybox for the AR camera feed!
             lightEstimator = null
+            environment = SceneView.createEnvironment(environmentLoader, isOpaque = false)
             indirectLight?.intensity = 30_000f
-            mainLightNode?.intensity = 80_000f
+            mainLightNode?.intensity = 68_000f
+            mainLightNode?.lightDirection = Float3(0.0f, -0.35f, -1.0f)
 
             // Configure ARCore Session with Instant Placement (LOCAL_Y_UP)
             configureSession { session, config ->
@@ -981,10 +973,18 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                 }
             }
 
-            onSessionUpdated = { session, frame ->
-                // Ensure ambient & main lighting stay balanced every frame
+            onSessionUpdated = { _, frame ->
+                // Ensure the neutral studio IBL environment and balanced intensity remain active
+                if (indirectLight == null) {
+                    environment = SceneView.createEnvironment(environmentLoader, isOpaque = false)
+                }
                 indirectLight?.intensity = 30_000f
-                mainLightNode?.intensity = 80_000f
+                mainLightNode?.intensity = 68_000f
+
+                // Align the main directional light with the user's camera viewing direction
+                // so the front of the 3D landmark facing the user is always evenly lit!
+                val zAxis = frame.camera.pose.zAxis
+                mainLightNode?.lightDirection = Float3(-zAxis[0], -zAxis[1] - 0.35f, -zAxis[2])
 
                 // Automatically place the landmark ~2.0m in front of the user as soon as ARCore tracks
                 if (!autoPlacedInAr && frame.camera.trackingState == TrackingState.TRACKING) {
