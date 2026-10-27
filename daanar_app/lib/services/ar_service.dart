@@ -12,10 +12,11 @@ class ARService {
         landmark.media.arModelUrl != null;
   }
 
-  /// Returns true if the landmark has at least a marker image (demo mode available).
+  /// Returns true if the landmark has a 3D model, marker image, or bundled offline model.
   static bool hasAnyARAsset(Landmark landmark) {
     return landmark.media.arMarkerImage != null ||
-        landmark.media.arModelUrl != null;
+        landmark.media.arModelUrl != null ||
+        const {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}.contains(landmark.id);
   }
 
   /// Builds the URL for the WebAR page served by Laravel.

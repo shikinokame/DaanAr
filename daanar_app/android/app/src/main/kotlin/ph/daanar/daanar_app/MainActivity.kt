@@ -13,16 +13,41 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ph.daanar/ar")
             .setMethodCallHandler { call, result ->
-                if (call.method != "openSceneViewer") {
-                    result.notImplemented()
-                    return@setMethodCallHandler
-                }
-                try {
-                    val raw = requireNotNull(call.argument<String>("uri"))
-                    result.success(openSceneViewer(raw))
-                } catch (error: Exception) {
-                    Log.e("DaanAR.AR", "Could not launch AR", error)
-                    result.error("AR_LAUNCH_FAILED", error.message, null)
+                when (call.method) {
+                    "openNativeArScreen" -> {
+                        try {
+                            val landmarkId = call.argument<Int>("landmarkId") ?: 0
+                            val landmarkName = call.argument<String>("landmarkName") ?: "Landmark"
+                            val municipalityName = call.argument<String>("municipalityName") ?: "Pangasinan"
+                            val category = call.argument<String>("category") ?: "heritage"
+                            val description = call.argument<String>("description") ?: ""
+                            val modelUrl = call.argument<String>("modelUrl") ?: ""
+
+                            val intent = Intent(this, ArCoreLandmarkActivity::class.java).apply {
+                                putExtra("landmarkId", landmarkId)
+                                putExtra("landmarkName", landmarkName)
+                                putExtra("municipalityName", municipalityName)
+                                putExtra("category", category)
+                                putExtra("description", description)
+                                putExtra("modelUrl", modelUrl)
+                            }
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (error: Exception) {
+                            Log.e("DaanAR.AR", "Could not launch ArCoreLandmarkActivity", error)
+                            result.error("AR_LAUNCH_FAILED", error.message, null)
+                        }
+                    }
+                    "openSceneViewer" -> {
+                        try {
+                            val raw = requireNotNull(call.argument<String>("uri"))
+                            result.success(openSceneViewer(raw))
+                        } catch (error: Exception) {
+                            Log.e("DaanAR.AR", "Could not launch AR", error)
+                            result.error("AR_LAUNCH_FAILED", error.message, null)
+                        }
+                    }
+                    else -> result.notImplemented()
                 }
             }
     }
@@ -40,7 +65,6 @@ class MainActivity : FlutterActivity() {
             model.userInfo == null && model.path?.endsWith(".glb", ignoreCase = true) == true) {
             "AR needs a public HTTPS GLB model"
         }
-        // These public storage files do not need the preview's cache query.
         val modelFile = model.buildUpon().clearQuery().fragment(null).build().toString()
         val viewers = listOf(
             "com.google.android.googlequicksearchbox" to "ar_preferred",
@@ -58,9 +82,6 @@ class MainActivity : FlutterActivity() {
                 }.build()
             try {
                 Log.i("DaanAR.AR", "Opening $pkg: $uri")
-                // Restore the original native handoff on top of DaanAR. Scene
-                // Viewer has no documented activity-result success contract.
-                // Do not attach a result request or display a canceled-result dialog.
                 startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(pkg))
                 return true
             } catch (error: ActivityNotFoundException) {
