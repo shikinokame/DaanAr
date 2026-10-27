@@ -11,6 +11,7 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -45,22 +46,24 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.ByteBuffer
+import kotlin.math.atan2
+import kotlin.math.hypot
 
 /**
  * Native Kotlin 3D Studio + Google ARCore Instant Placement Activity.
  *
- * Features:
- * 1. 100% Offline-first 3D Studio Viewer using native Google Filament (`SceneView`):
- *    - Loads bundled `.glb` from `assets/models/<filename>` immediately with zero internet.
- *    - Checks & caches admin-uploaded `.glb` files in `filesDir/ar_models/` so new models
- *      work offline too after their first download.
- * 2. True Google ARCore Instant Placement (`Config.InstantPlacementMode.LOCAL_Y_UP`):
- *    - Tapping "View in your Space (AR)" switches directly to `ARSceneView` inside DaanAR
- *      without ever launching the external Google Search App (`ViewerActivity`).
- *    - Automatically places the 3D landmark in front of the user using ARCore's
- *      `hitTestInstantPlacement` / plane hit-test as soon as the first AR frame is ready,
- *      and lets the user tap anywhere on the floor to move it, pinch/slide to scale it,
- *      and rotate it 360°.
+ * Touch Controls:
+ * 1. 3D Studio Mode:
+ *    - 1-finger drag: Smooth 360° yaw + pitch rotation
+ *    - 2-finger pinch: Zoom / scale model smoothly
+ *    - 2-finger drag: Pan model
+ * 2. ARCore Instant Placement Mode (`Config.InstantPlacementMode.LOCAL_Y_UP`):
+ *    - Tap or 1-finger drag (in Move Mode): Slides the 3D landmark smoothly across the floor
+ *      in real time using ARCore's `hitTestInstantPlacement` / plane hit-test without recreating
+ *      the 3D mesh every frame.
+ *    - 1-finger drag (in Rotate Mode) or 2-finger twist (anytime): Rotates the 3D landmark 360°
+ *      around its vertical Y-axis (`modelNode.rotation`).
+ *    - 2-finger pinch or Scale Slider: Scales the 3D landmark (`0.3x` – `3.0x`).
  */
 class ArCoreLandmarkActivity : AppCompatActivity() {
 
@@ -68,7 +71,6 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         private const val TAG = "DaanAR.NativeAR"
         private const val REQ_CAMERA = 4102
 
-        // Fallback mapping from landmarkId -> bundled asset filename in assets/models/
         private val LANDMARK_ASSET_MAP = mapOf(
             1 to "01M3V1DR3QRRHX25THD630R5G1.glb",  // Old PNR Dagupan/Mayombo (1st) Station
             2 to "01M3V95CJWDJ047YT8SGA7HX4A.glb",  // Santuario de San Juan Evangelista
@@ -94,21 +96,32 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
     private lateinit var rootContainer: FrameLayout
     private lateinit var viewerStageContainer: FrameLayout
 
-    // 3D Studio Preview View
+    // 3D Studio Preview View & Transform State
     private var studioSceneView: SceneView? = null
     private var studioModelNode: ModelNode? = null
+    private var studioInitialScale: Float3 = Float3(1.0f, 1.0f, 1.0f)
+    private var studioYawDeg: Float = 0f
+    private var studioPitchDeg: Float = 12f
+    private var studioZoomFactor: Float = 1.0f
+    private var studioPanX: Float = 0f
+    private var studioPanY: Float = 0f
 
-    // Native ARCore View
+    // Native ARCore View & Transform State
     private var arSceneView: ARSceneView? = null
     private var arAnchorNode: AnchorNode? = null
     private var arModelNode: ModelNode? = null
     private var isArModeActive: Boolean = false
     private var autoPlacedInAr: Boolean = false
-    private var baseArScale: Float = 1.0f
+    private var baseArScale: Float = 1.15f
     private var initialNodeScale: Float3 = Float3(1.0f, 1.0f, 1.0f)
     private var userScaleMultiplier: Float = 1.0f
+    private var arRotationYawDeg: Float = 0f
+    // When true: 1-finger drag moves model on floor. When false: 1-finger drag rotates 360°.
+    // (2-finger twist and Rotate Slider ALWAYS rotate in both modes!)
+    private var arSingleFingerMovesFloor: Boolean = true
+    private var lastAnchorRefreshMs: Long = 0L
 
-    // Cached model ByteBuffer so switching between 3D Studio & AR is instantaneous (0ms)
+    // Cached model ByteBuffer so switching between 3D Studio & AR is instantaneous
     private var cachedModelBytes: ByteArray? = null
 
     // UI Elements
@@ -121,6 +134,10 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
     private lateinit var infoCard: LinearLayout
     private lateinit var scaleValueText: TextView
     private lateinit var scaleSeekBar: SeekBar
+    private lateinit var rotateValueText: TextView
+    private lateinit var rotateSeekBar: SeekBar
+    private lateinit var modeMoveBtn: Button
+    private lateinit var modeRotateBtn: Button
     private var descExpanded = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -257,7 +274,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
 
         // 3. Interaction Hint Pill under Top Bar
         hintPillText = TextView(this).apply {
-            text = "1-finger rotate • Pinch to zoom • 2-finger pan"
+            text = "1-finger drag to rotate 360° • Pinch to zoom • 2-finger pan"
             setTextColor(Color.parseColor("#E6FFFFFF"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setPadding(dp(16), dp(8), dp(16), dp(8))
@@ -309,8 +326,8 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         arControlsCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
-            background = roundedBg(Color.parseColor("#D90B1812"), 20, Color.parseColor("#59D4A853"), 1)
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = roundedBg(Color.parseColor("#DF0B1812"), 20, Color.parseColor("#59D4A853"), 1)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -319,16 +336,88 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             }
         }
 
-        val arTopHintRow = TextView(this).apply {
-            text = "⚡ ARCore Instant Placement Active — Tap anywhere on floor to move"
-            setTextColor(Color.parseColor("#34D399"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.DEFAULT_BOLD
+        // Touch Mode Switcher: [ ✥ Drag to Move ]  |  [ ⟳ Drag to Rotate ]
+        val modeSwitchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(10))
         }
-        arControlsCard.addView(arTopHintRow)
 
+        modeMoveBtn = Button(this).apply {
+            text = "✥ 1-Finger Move"
+            isAllCaps = false
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, dp(38), 1f).apply {
+                marginEnd = dp(6)
+            }
+            setOnClickListener {
+                setArTouchMode(moveFloor = true)
+            }
+        }
+        modeSwitchRow.addView(modeMoveBtn)
+
+        modeRotateBtn = Button(this).apply {
+            text = "⟳ 1-Finger Rotate"
+            isAllCaps = false
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, dp(38), 1f)
+            setOnClickListener {
+                setArTouchMode(moveFloor = false)
+            }
+        }
+        modeSwitchRow.addView(modeRotateBtn)
+        arControlsCard.addView(modeSwitchRow)
+
+        // Rotate 360° Slider Row
+        val rotateRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(6))
+        }
+        val rotateTitle = TextView(this).apply {
+            text = "Rotate"
+            setTextColor(Color.parseColor("#D4A853"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(dp(46), ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        rotateRow.addView(rotateTitle)
+
+        rotateSeekBar = SeekBar(this).apply {
+            max = 360
+            progress = 180
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(6)
+                marginEnd = dp(6)
+            }
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        arRotationYawDeg = (progress - 180).toFloat()
+                        rotateValueText.text = "${arRotationYawDeg.toInt()}°"
+                        applyArModelTransform()
+                    }
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+        rotateRow.addView(rotateSeekBar)
+
+        rotateValueText = TextView(this).apply {
+            text = "0°"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(dp(42), ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        rotateRow.addView(rotateValueText)
+        arControlsCard.addView(rotateRow)
+
+        // Scale Slider Row
         val scaleRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -339,21 +428,24 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#D4A853"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(dp(46), ViewGroup.LayoutParams.WRAP_CONTENT)
         }
         scaleRow.addView(scaleTitle)
 
         scaleSeekBar = SeekBar(this).apply {
-            max = 260 // 0.3x to 2.9x
+            max = 270 // 0.3x to 3.0x
             progress = 70 // 1.0x
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = dp(10)
-                marginEnd = dp(10)
+                marginStart = dp(6)
+                marginEnd = dp(6)
             }
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    userScaleMultiplier = (progress + 30) / 100f
-                    scaleValueText.text = String.format("%.1fx", userScaleMultiplier)
-                    applyArModelScale()
+                    if (fromUser) {
+                        userScaleMultiplier = (progress + 30) / 100f
+                        scaleValueText.text = String.format("%.1fx", userScaleMultiplier)
+                        applyArModelTransform()
+                    }
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -366,6 +458,8 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(dp(42), ViewGroup.LayoutParams.WRAP_CONTENT)
         }
         scaleRow.addView(scaleValueText)
         arControlsCard.addView(scaleRow)
@@ -376,16 +470,16 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         }
 
         val placeCenterBtn = Button(this).apply {
-            text = "🎯 Place in Front"
+            text = "🎯 Recenter Here"
             isAllCaps = false
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             background = roundedBg(Color.parseColor("#26FFFFFF"), 14, Color.parseColor("#4DD4A853"), 1)
-            layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f).apply {
                 marginEnd = dp(8)
             }
             setOnClickListener {
-                placeAtScreenCenterInstant()
+                placeAtScreenCenterInstant(forceRecreate = false)
             }
         }
         arButtonsRow.addView(placeCenterBtn)
@@ -396,7 +490,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#FFB4B4"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             background = roundedBg(Color.parseColor("#33EF4444"), 14, Color.parseColor("#66EF4444"), 1)
-            layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f)
+            layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f)
             setOnClickListener {
                 exitArModeToStudio()
             }
@@ -491,16 +585,31 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         loadingOverlay.addView(loadingStatusText)
         rootContainer.addView(loadingOverlay)
 
+        setArTouchMode(moveFloor = true)
         setContentView(rootContainer)
     }
 
-    /**
-     * Resolves the `.glb` bytes 100% offline-first:
-     * 1. Extracts filename from `modelUrl` (e.g., `01M5RKFAQ2CDHWE9QCNDK4NC72.glb`) or falls back to `LANDMARK_ASSET_MAP[landmarkId]`.
-     * 2. Checks if that file is bundled in `assets/models/<filename>` -> loads in <50ms with zero internet.
-     * 3. Else checks if it was previously downloaded into `filesDir/ar_models/<filename>` -> loads offline.
-     * 4. Else downloads from `modelUrl` over HTTPS and saves to `filesDir/ar_models/<filename>` for future offline use.
-     */
+    private fun setArTouchMode(moveFloor: Boolean) {
+        arSingleFingerMovesFloor = moveFloor
+        if (moveFloor) {
+            modeMoveBtn.setTextColor(Color.parseColor("#0B1812"))
+            modeMoveBtn.background = roundedBg(Color.parseColor("#D4A853"), 14)
+            modeRotateBtn.setTextColor(Color.WHITE)
+            modeRotateBtn.background = roundedBg(Color.parseColor("#26FFFFFF"), 14, Color.parseColor("#33FFFFFF"), 1)
+            if (isArModeActive) {
+                hintPillText.text = "Drag or tap floor to move • Pinch to scale • 2-finger twist to rotate"
+            }
+        } else {
+            modeRotateBtn.setTextColor(Color.parseColor("#0B1812"))
+            modeRotateBtn.background = roundedBg(Color.parseColor("#D4A853"), 14)
+            modeMoveBtn.setTextColor(Color.WHITE)
+            modeMoveBtn.background = roundedBg(Color.parseColor("#26FFFFFF"), 14, Color.parseColor("#33FFFFFF"), 1)
+            if (isArModeActive) {
+                hintPillText.text = "1-finger drag to rotate 360° • Tap floor to move • Pinch to scale"
+            }
+        }
+    }
+
     private fun load3DModelOfflineFirst() {
         lifecycleScope.launch {
             try {
@@ -595,12 +704,18 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         return null
     }
 
-    /**
-     * Renders the interactive 3D Studio View using native Filament (`SceneView`).
-     */
+    // =========================================================================
+    // 3D STUDIO PREVIEW (WITH CUSTOM 1-FINGER ROTATE + PINCH ZOOM + 2-FINGER PAN)
+    // =========================================================================
     private fun startStudio3DPreview(glbBytes: ByteArray) {
         destroyArSceneView()
         destroyStudioSceneView()
+
+        studioYawDeg = 0f
+        studioPitchDeg = 12f
+        studioZoomFactor = 1.0f
+        studioPanX = 0f
+        studioPanY = 0f
 
         val sceneView = SceneView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -614,20 +729,94 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         val modelInstance = sceneView.modelLoader.createModelInstance(ByteBuffer.wrap(glbBytes))
         val modelNode = ModelNode(
             modelInstance = modelInstance,
-            scaleToUnits = 1.65f,
+            scaleToUnits = 1.75f,
             centerOrigin = Float3(0.0f, 0.0f, 0.0f)
-        ).apply {
-            isEditable = true
-        }
-
+        )
+        studioInitialScale = modelNode.scale
         sceneView.addChildNode(modelNode)
         studioModelNode = modelNode
 
-        // Position camera slightly above looking at the landmark
-        sceneView.cameraNode.position = Float3(0.0f, 0.55f, 2.55f)
+        sceneView.cameraNode.position = Float3(0.0f, 0.35f, 2.55f)
         sceneView.cameraNode.lookAt(Float3(0.0f, 0.0f, 0.0f))
+        applyStudioTransform()
+
+        attachStudioTouchController(sceneView)
     }
 
+    private fun applyStudioTransform() {
+        val node = studioModelNode ?: return
+        node.rotation = Float3(studioPitchDeg, studioYawDeg, 0f)
+        node.position = Float3(studioPanX, studioPanY, 0f)
+        node.scale = Float3(
+            studioInitialScale.x * studioZoomFactor,
+            studioInitialScale.y * studioZoomFactor,
+            studioInitialScale.z * studioZoomFactor
+        )
+    }
+
+    private fun attachStudioTouchController(view: View) {
+        var prevX = 0f
+        var prevY = 0f
+        var prevMidX = 0f
+        var prevMidY = 0f
+        var twoFingerActive = false
+
+        val scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                studioZoomFactor = (studioZoomFactor * detector.scaleFactor).coerceIn(0.35f, 3.8f)
+                applyStudioTransform()
+                return true
+            }
+        })
+
+        view.setOnTouchListener { _, event ->
+            scaleDetector.onTouchEvent(event)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    prevX = event.x
+                    prevY = event.y
+                    twoFingerActive = false
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    if (event.pointerCount >= 2) {
+                        twoFingerActive = true
+                        prevMidX = (event.getX(0) + event.getX(1)) * 0.5f
+                        prevMidY = (event.getY(0) + event.getY(1)) * 0.5f
+                    }
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (event.pointerCount >= 2) {
+                        twoFingerActive = true
+                        val midX = (event.getX(0) + event.getX(1)) * 0.5f
+                        val midY = (event.getY(0) + event.getY(1)) * 0.5f
+                        val dx = midX - prevMidX
+                        val dy = midY - prevMidY
+                        studioPanX = (studioPanX + dx * 0.0022f).coerceIn(-1.2f, 1.2f)
+                        studioPanY = (studioPanY - dy * 0.0022f).coerceIn(-1.2f, 1.2f)
+                        prevMidX = midX
+                        prevMidY = midY
+                        applyStudioTransform()
+                    } else if (!twoFingerActive && event.pointerCount == 1) {
+                        val dx = event.x - prevX
+                        val dy = event.y - prevY
+                        studioYawDeg = (studioYawDeg + dx * 0.45f) % 360f
+                        studioPitchDeg = (studioPitchDeg + dy * 0.25f).coerceIn(-45f, 65f)
+                        prevX = event.x
+                        prevY = event.y
+                        applyStudioTransform()
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    twoFingerActive = false
+                }
+            }
+            true
+        }
+    }
+
+    // =========================================================================
+    // NATIVE GOOGLE ARCORE INSTANT PLACEMENT + SMOOTH MOVE / ROTATE / SCALE
+    // =========================================================================
     private fun requestCameraAndStartAr() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED
@@ -657,23 +846,22 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Switches from the 3D Studio Preview into Native Kotlin Google ARCore mode with
-     * `Config.InstantPlacementMode.LOCAL_Y_UP` enabled!
-     */
     private fun enterNativeArCoreMode() {
-        val bytes = cachedModelBytes ?: return
+        if (cachedModelBytes == null) return
 
         isArModeActive = true
         autoPlacedInAr = false
         userScaleMultiplier = 1.0f
+        arRotationYawDeg = 0f
         scaleSeekBar.progress = 70
         scaleValueText.text = "1.0x"
+        rotateSeekBar.progress = 180
+        rotateValueText.text = "0°"
 
         launchArButton.visibility = View.GONE
         infoCard.visibility = View.GONE
         arControlsCard.visibility = View.VISIBLE
-        hintPillText.text = "Tap floor to reposition • Pinch/Slider to scale • 2-finger rotate"
+        setArTouchMode(moveFloor = true)
 
         destroyStudioSceneView()
         destroyArSceneView()
@@ -699,59 +887,178 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             }
 
             onSessionUpdated = { session, frame ->
-                // Instant Placement: As soon as ARCore is tracking, automatically place
-                // the landmark ~2.0m in front of the user so they never wait for floor scanning!
+                // Automatically place the landmark ~2.0m in front of the user as soon as ARCore tracks
                 if (!autoPlacedInAr && frame.camera.trackingState == TrackingState.TRACKING) {
-                    val placed = performInstantOrPlanePlacement(
-                        session = session,
+                    val placed = placeOrMoveModelAtScreenPoint(
                         frame = frame,
                         px = width / 2f,
-                        py = height * 0.58f
+                        py = height * 0.56f,
+                        forceNewAnchor = true
                     )
                     if (placed) {
                         autoPlacedInAr = true
                     }
                 }
             }
-
-            // Allow single-tap on floor to reposition the landmark instantly via ARCore hitTestInstantPlacement
-            onTouchEvent = { e: MotionEvent, _ ->
-                if (e.action == MotionEvent.ACTION_UP && e.pointerCount == 1) {
-                    val currentSession = session
-                    val currentFrame = frame
-                    if (currentSession != null && currentFrame != null &&
-                        currentFrame.camera.trackingState == TrackingState.TRACKING
-                    ) {
-                        performInstantOrPlanePlacement(
-                            session = currentSession,
-                            frame = currentFrame,
-                            px = e.x,
-                            py = e.y
-                        )
-                    }
-                }
-                false
-            }
         }
 
+        attachArTouchController(arView)
         viewerStageContainer.addView(arView)
         arSceneView = arView
     }
 
     /**
-     * Uses ARCore's `frame.hitTestInstantPlacement(px, py, 2.0f)` (or horizontal plane hit-test)
-     * to immediately anchor the 3D landmark in real 3D world space without waiting for floor scanning.
+     * Custom multi-touch controller for AR mode:
+     * - 2-finger pinch: Scales `userScaleMultiplier` smoothly & updates Scale SeekBar
+     * - 2-finger twist: Rotates `arRotationYawDeg` smoothly & updates Rotate SeekBar
+     * - 1-finger drag:
+     *     - In `Move` mode (`arSingleFingerMovesFloor == true`): smoothly repositions the landmark
+     *       along the floor where the user's finger drags!
+     *     - In `Rotate` mode (`arSingleFingerMovesFloor == false`): rotates the landmark 360°!
+     * - Single tap on floor: Always moves the landmark to the tapped floor point!
      */
-    private fun performInstantOrPlanePlacement(
-        session: Session,
+    private fun attachArTouchController(arView: ARSceneView) {
+        var downX = 0f
+        var downY = 0f
+        var prevX = 0f
+        var prevY = 0f
+        var prevTwoFingerAngle: Float? = null
+        var multiTouchUsed = false
+
+        val scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                userScaleMultiplier = (userScaleMultiplier * detector.scaleFactor).coerceIn(0.3f, 3.0f)
+                scaleSeekBar.progress = ((userScaleMultiplier * 100f).toInt() - 30).coerceIn(0, 270)
+                scaleValueText.text = String.format("%.1fx", userScaleMultiplier)
+                applyArModelTransform()
+                return true
+            }
+        })
+
+        arView.setOnTouchListener { _, event ->
+            scaleDetector.onTouchEvent(event)
+
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    prevX = event.x
+                    prevY = event.y
+                    prevTwoFingerAngle = null
+                    multiTouchUsed = false
+                }
+
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    if (event.pointerCount >= 2) {
+                        multiTouchUsed = true
+                        prevTwoFingerAngle = computeAngleDegrees(event)
+                    }
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    if (event.pointerCount >= 2) {
+                        multiTouchUsed = true
+                        val currentAngle = computeAngleDegrees(event)
+                        val lastAngle = prevTwoFingerAngle
+                        if (lastAngle != null) {
+                            var delta = currentAngle - lastAngle
+                            if (delta > 180f) delta -= 360f
+                            if (delta < -180f) delta += 360f
+                            // 2-finger twist rotates model yaw
+                            arRotationYawDeg = normalizeYaw(arRotationYawDeg - delta * 1.35f)
+                            updateRotateUiFromYaw()
+                            applyArModelTransform()
+                        }
+                        prevTwoFingerAngle = currentAngle
+                    } else if (!multiTouchUsed && event.pointerCount == 1) {
+                        val dx = event.x - prevX
+                        val dy = event.y - prevY
+                        prevX = event.x
+                        prevY = event.y
+
+                        if (arSingleFingerMovesFloor) {
+                            // Dragging finger slides the landmark along the floor in real time
+                            val now = System.currentTimeMillis()
+                            if (now - lastAnchorRefreshMs >= 32L && hypot(dx, dy) > 1.5f) {
+                                lastAnchorRefreshMs = now
+                                arView.frame?.let { currentFrame ->
+                                    if (currentFrame.camera.trackingState == TrackingState.TRACKING) {
+                                        placeOrMoveModelAtScreenPoint(
+                                            frame = currentFrame,
+                                            px = event.x,
+                                            py = event.y,
+                                            forceNewAnchor = false
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            // 1-finger drag rotates 360°
+                            arRotationYawDeg = normalizeYaw(arRotationYawDeg + dx * 0.55f)
+                            updateRotateUiFromYaw()
+                            applyArModelTransform()
+                        }
+                    }
+                }
+
+                MotionEvent.ACTION_POINTER_UP -> {
+                    prevTwoFingerAngle = null
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    val totalMove = hypot(event.x - downX, event.y - downY)
+                    // Quick tap on the screen always moves the landmark to the tapped spot!
+                    if (!multiTouchUsed && totalMove < dp(14)) {
+                        arView.frame?.let { currentFrame ->
+                            if (currentFrame.camera.trackingState == TrackingState.TRACKING) {
+                                placeOrMoveModelAtScreenPoint(
+                                    frame = currentFrame,
+                                    px = event.x,
+                                    py = event.y,
+                                    forceNewAnchor = false
+                                )
+                            }
+                        }
+                    }
+                    prevTwoFingerAngle = null
+                }
+            }
+            true
+        }
+    }
+
+    private fun computeAngleDegrees(event: MotionEvent): Float {
+        val dx = (event.getX(1) - event.getX(0)).toDouble()
+        val dy = (event.getY(1) - event.getY(0)).toDouble()
+        return Math.toDegrees(atan2(dy, dx)).toFloat()
+    }
+
+    private fun normalizeYaw(deg: Float): Float {
+        var d = deg % 360f
+        if (d > 180f) d -= 360f
+        if (d < -180f) d += 360f
+        return d
+    }
+
+    private fun updateRotateUiFromYaw() {
+        rotateValueText.text = "${arRotationYawDeg.toInt()}°"
+        rotateSeekBar.progress = (arRotationYawDeg.toInt() + 180).coerceIn(0, 360)
+    }
+
+    /**
+     * Moves or creates the ARCore anchor at screen coordinate `(px, py)` WITHOUT destroying/recreating
+     * the `ModelNode` if it already exists—making floor dragging fast and lag-free!
+     */
+    private fun placeOrMoveModelAtScreenPoint(
         frame: Frame,
         px: Float,
-        py: Float
+        py: Float,
+        forceNewAnchor: Boolean
     ): Boolean {
         val arView = arSceneView ?: return false
         val bytes = cachedModelBytes ?: return false
 
-        // 1. Prefer real horizontal plane hit if already detected, else use InstantPlacementPoint
+        // 1. Prefer horizontal plane hit if detected, otherwise InstantPlacementPoint (2.0m)
         val planeHit: HitResult? = frame.hitTest(px, py).firstOrNull { hit ->
             val trackable = hit.trackable
             (trackable is Plane && trackable.isPoseInPolygon(hit.hitPose) &&
@@ -772,10 +1079,28 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             return false
         }
 
-        // Remove previous anchor node if moving
-        arAnchorNode?.let { oldAnchor ->
-            arView.removeChildNode(oldAnchor)
-            oldAnchor.destroy()
+        val existingAnchorNode = arAnchorNode
+        val existingModelNode = arModelNode
+
+        // Fast path: if the model is already loaded, simply swap the Anchor on the existing AnchorNode!
+        if (!forceNewAnchor && existingAnchorNode != null && existingModelNode != null) {
+            try {
+                val oldAnchor = existingAnchorNode.anchor
+                existingAnchorNode.anchor = newAnchor
+                oldAnchor?.detach()
+                applyArModelTransform()
+                return true
+            } catch (e: Exception) {
+                Log.w(TAG, "Fallback to recreating AnchorNode", e)
+            }
+        }
+
+        // First-time creation (or forced reset)
+        existingAnchorNode?.let { oldNode ->
+            arView.removeChildNode(oldNode)
+            try {
+                oldNode.destroy()
+            } catch (_: Exception) {}
         }
 
         val anchorNode = AnchorNode(arView.engine, newAnchor)
@@ -785,36 +1110,28 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         val modelNode = ModelNode(
             modelInstance = modelInstance,
             scaleToUnits = baseArScale,
-            // Place bottom of model flush on the floor anchor
             centerOrigin = Float3(0.0f, -0.5f, 0.0f)
-        ).apply {
-            isEditable = true
-        }
-        initialNodeScale = modelNode.scale
-        modelNode.scale = Float3(
-            initialNodeScale.x * userScaleMultiplier,
-            initialNodeScale.y * userScaleMultiplier,
-            initialNodeScale.z * userScaleMultiplier
         )
+        initialNodeScale = modelNode.scale
 
         anchorNode.addChildNode(modelNode)
         arView.addChildNode(anchorNode)
 
         arAnchorNode = anchorNode
         arModelNode = modelNode
+        applyArModelTransform()
         return true
     }
 
-    private fun placeAtScreenCenterInstant() {
+    private fun placeAtScreenCenterInstant(forceRecreate: Boolean) {
         val arView = arSceneView ?: return
-        val currentSession = arView.session ?: return
         val currentFrame = arView.frame ?: return
         if (currentFrame.camera.trackingState == TrackingState.TRACKING) {
-            val ok = performInstantOrPlanePlacement(
-                session = currentSession,
+            val ok = placeOrMoveModelAtScreenPoint(
                 frame = currentFrame,
                 px = arView.width / 2f,
-                py = arView.height * 0.58f
+                py = arView.height * 0.56f,
+                forceNewAnchor = forceRecreate
             )
             if (!ok) {
                 Toast.makeText(this, "Point camera slightly downward and tap again", Toast.LENGTH_SHORT).show()
@@ -822,13 +1139,14 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         }
     }
 
-    private fun applyArModelScale() {
+    private fun applyArModelTransform() {
         val node = arModelNode ?: return
         node.scale = Float3(
             initialNodeScale.x * userScaleMultiplier,
             initialNodeScale.y * userScaleMultiplier,
             initialNodeScale.z * userScaleMultiplier
         )
+        node.rotation = Float3(0f, arRotationYawDeg, 0f)
     }
 
     private fun exitArModeToStudio() {
@@ -836,7 +1154,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         arControlsCard.visibility = View.GONE
         launchArButton.visibility = View.VISIBLE
         infoCard.visibility = View.VISIBLE
-        hintPillText.text = "1-finger rotate • Pinch to zoom • 2-finger pan"
+        hintPillText.text = "1-finger drag to rotate 360° • Pinch to zoom • 2-finger pan"
 
         destroyArSceneView()
         cachedModelBytes?.let { startStudio3DPreview(it) }
@@ -845,11 +1163,19 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
     private fun resetCurrentView() {
         if (isArModeActive) {
             userScaleMultiplier = 1.0f
+            arRotationYawDeg = 0f
             scaleSeekBar.progress = 70
             scaleValueText.text = "1.0x"
-            placeAtScreenCenterInstant()
+            rotateSeekBar.progress = 180
+            rotateValueText.text = "0°"
+            placeAtScreenCenterInstant(forceRecreate = false)
         } else {
-            cachedModelBytes?.let { startStudio3DPreview(it) }
+            studioYawDeg = 0f
+            studioPitchDeg = 12f
+            studioZoomFactor = 1.0f
+            studioPanX = 0f
+            studioPanY = 0f
+            applyStudioTransform()
         }
     }
 
@@ -890,4 +1216,3 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         super.onDestroy()
     }
 }
-
