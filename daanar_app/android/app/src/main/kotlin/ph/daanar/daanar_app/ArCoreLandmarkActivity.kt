@@ -656,7 +656,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             if (assetList.contains(name)) {
                 Log.i(TAG, "Loading bundled offline asset: models/$name")
                 assets.open("models/$name").use { input ->
-                    return Pair(patchGlbToMattePbr(input.readBytes()), "OFFLINE READY")
+                    return Pair(input.readBytes(), "OFFLINE READY")
                 }
             }
         }
@@ -667,7 +667,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             val cachedFile = File(cacheDir, name)
             if (cachedFile.exists() && cachedFile.length() > 1024) {
                 Log.i(TAG, "Loading locally cached model: ${cachedFile.absolutePath}")
-                return Pair(patchGlbToMattePbr(cachedFile.readBytes()), "CACHED OFFLINE")
+                return Pair(cachedFile.readBytes(), "CACHED OFFLINE")
             }
         }
 
@@ -687,7 +687,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                     }
                 }
                 if (targetFile.exists() && targetFile.length() > 1024) {
-                    return Pair(patchGlbToMattePbr(targetFile.readBytes()), "SYNCED FOR OFFLINE")
+                    return Pair(targetFile.readBytes(), "SYNCED FOR OFFLINE")
                 }
             } catch (netErr: Exception) {
                 Log.w(TAG, "Network download failed, falling back to any bundled asset", netErr)
@@ -697,81 +697,11 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         // 4. Final fallback: if URL had a new filename and user is offline, use mapped asset for this landmarkId
         if (mappedFileName.isNotEmpty() && assetList.contains(mappedFileName)) {
             assets.open("models/$mappedFileName").use { input ->
-                return Pair(patchGlbToMattePbr(input.readBytes()), "OFFLINE READY")
+                return Pair(input.readBytes(), "OFFLINE READY")
             }
         }
 
         return null
-    }
-
-    /**
-     * Ensures any `.glb` binary (bundled or freshly downloaded from an admin upload) uses standard
-     * glTF 2.0 matte PBR (`metallicFactor = 0.0`, `roughnessFactor = 0.85`, keeping `normalTexture`
-     * intact and WITHOUT `KHR_materials_unlit`, which causes Filament ubershader errors).
-     */
-    private fun patchGlbToMattePbr(glb: ByteArray): ByteArray {
-        try {
-            if (glb.size < 28) return glb
-            val headerBuf = ByteBuffer.wrap(glb, 0, 20).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-            val magic = headerBuf.int
-            val version = headerBuf.int
-            val totalLength = headerBuf.int
-            val jsonLen = headerBuf.int
-            val jsonType = headerBuf.int
-            if (magic != 0x46546C67 || version != 2 || jsonLen <= 0 || 20 + jsonLen > glb.size) {
-                return glb
-            }
-
-            val jsonStr = String(glb, 20, jsonLen, Charsets.UTF_8)
-            val root = org.json.JSONObject(jsonStr)
-
-            // Strip KHR_materials_unlit if present so Filament always uses its standard PBR ubershader
-            root.remove("extensionsUsed")
-            root.remove("extensionsRequired")
-
-            val materials = root.optJSONArray("materials")
-            if (materials != null) {
-                for (i in 0 until materials.length()) {
-                    val mat = materials.optJSONObject(i) ?: continue
-                    mat.remove("extensions")
-                    val pbr = mat.optJSONObject("pbrMetallicRoughness")
-                    if (pbr != null) {
-                        pbr.remove("metallicRoughnessTexture")
-                        pbr.put("metallicFactor", 0.0)
-                        pbr.put("roughnessFactor", 0.85)
-                    }
-                }
-            }
-
-            var newJsonBytes = root.toString().toByteArray(Charsets.UTF_8)
-            val pad = (4 - (newJsonBytes.size % 4)) % 4
-            if (pad > 0) {
-                val padded = ByteArray(newJsonBytes.size + pad)
-                System.arraycopy(newJsonBytes, 0, padded, 0, newJsonBytes.size)
-                for (i in newJsonBytes.size until padded.size) {
-                    padded[i] = 0x20.toByte()
-                }
-                newJsonBytes = padded
-            }
-
-            val binOffset = 20 + jsonLen
-            val binLen = glb.size - binOffset
-            val newTotalLen = 20 + newJsonBytes.size + binLen
-            val out = ByteArray(newTotalLen)
-            val outHeader = ByteBuffer.wrap(out, 0, 20).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-            outHeader.putInt(0x46546C67)
-            outHeader.putInt(2)
-            outHeader.putInt(newTotalLen)
-            outHeader.putInt(newJsonBytes.size)
-            outHeader.putInt(jsonType)
-
-            System.arraycopy(newJsonBytes, 0, out, 20, newJsonBytes.size)
-            System.arraycopy(glb, binOffset, out, 20 + newJsonBytes.size, binLen)
-            return out
-        } catch (e: Exception) {
-            Log.w(TAG, "GLB matte PBR patch skipped: ${e.message}")
-            return glb
-        }
     }
 
     // =========================================================================
@@ -792,10 +722,9 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            // Natural neutral studio lighting (toned down so 3D Studio is not overly bright)
-            indirectLight?.intensity = 30_000f
-            mainLightNode?.intensity = 68_000f
-            mainLightNode?.lightDirection = Float3(0.0f, -0.35f, -1.0f)
+            // Natural neutral studio lighting (toned down slightly from SceneView's 30k/100k default)
+            indirectLight?.intensity = 26_000f
+            mainLightNode?.intensity = 65_000f
         }
         viewerStageContainer.addView(sceneView)
         studioSceneView = sceneView
@@ -806,7 +735,6 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             scaleToUnits = 1.75f,
             centerOrigin = Float3(0.0f, 0.0f, 0.0f)
         )
-        forceNonMetallicMaterials(modelNode)
         studioInitialScale = modelNode.scale
         sceneView.addChildNode(modelNode)
         studioModelNode = modelNode
@@ -957,9 +885,8 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             // skybox for the AR camera feed!
             lightEstimator = null
             environment = SceneView.createEnvironment(environmentLoader, isOpaque = false)
-            indirectLight?.intensity = 30_000f
-            mainLightNode?.intensity = 68_000f
-            mainLightNode?.lightDirection = Float3(0.0f, -0.35f, -1.0f)
+            indirectLight?.intensity = 26_000f
+            mainLightNode?.intensity = 65_000f
 
             // Configure ARCore Session with Instant Placement (LOCAL_Y_UP)
             configureSession { session, config ->
@@ -978,8 +905,8 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                 if (indirectLight == null) {
                     environment = SceneView.createEnvironment(environmentLoader, isOpaque = false)
                 }
-                indirectLight?.intensity = 30_000f
-                mainLightNode?.intensity = 68_000f
+                indirectLight?.intensity = 26_000f
+                mainLightNode?.intensity = 65_000f
 
                 // Align the main directional light with the user's camera viewing direction
                 // so the front of the 3D landmark facing the user is always evenly lit!
@@ -1211,7 +1138,6 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             scaleToUnits = baseArScale,
             centerOrigin = Float3(0.0f, -0.5f, 0.0f)
         )
-        forceNonMetallicMaterials(modelNode)
         initialNodeScale = modelNode.scale
 
         anchorNode.addChildNode(modelNode)
