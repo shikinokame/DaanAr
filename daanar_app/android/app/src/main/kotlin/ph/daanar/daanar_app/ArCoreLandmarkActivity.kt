@@ -656,7 +656,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             if (assetList.contains(name)) {
                 Log.i(TAG, "Loading bundled offline asset: models/$name")
                 assets.open("models/$name").use { input ->
-                    return Pair(input.readBytes(), "OFFLINE READY")
+                    return Pair(patchGlbForTrueOriginalColors(input.readBytes()), "OFFLINE READY")
                 }
             }
         }
@@ -667,7 +667,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             val cachedFile = File(cacheDir, name)
             if (cachedFile.exists() && cachedFile.length() > 1024) {
                 Log.i(TAG, "Loading locally cached model: ${cachedFile.absolutePath}")
-                return Pair(cachedFile.readBytes(), "CACHED OFFLINE")
+                return Pair(patchGlbForTrueOriginalColors(cachedFile.readBytes()), "CACHED OFFLINE")
             }
         }
 
@@ -687,7 +687,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                     }
                 }
                 if (targetFile.exists() && targetFile.length() > 1024) {
-                    return Pair(targetFile.readBytes(), "SYNCED FOR OFFLINE")
+                    return Pair(patchGlbForTrueOriginalColors(targetFile.readBytes()), "SYNCED FOR OFFLINE")
                 }
             } catch (netErr: Exception) {
                 Log.w(TAG, "Network download failed, falling back to any bundled asset", netErr)
@@ -697,11 +697,96 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         // 4. Final fallback: if URL had a new filename and user is offline, use mapped asset for this landmarkId
         if (mappedFileName.isNotEmpty() && assetList.contains(mappedFileName)) {
             assets.open("models/$mappedFileName").use { input ->
-                return Pair(input.readBytes(), "OFFLINE READY")
+                return Pair(patchGlbForTrueOriginalColors(input.readBytes()), "OFFLINE READY")
             }
         }
 
         return null
+    }
+
+    /**
+     * Ensures any `.glb` binary (bundled or freshly downloaded from an admin upload) uses the
+     * glTF 2.0 `KHR_materials_unlit` extension and strips `metallicRoughnessTexture` so Google
+     * Filament renders the exact, 100% original unshaded `baseColorTexture` colors in both
+     * 3D Studio View and View in your Space (AR) without ever turning dark or over-exposed.
+     */
+    private fun patchGlbForTrueOriginalColors(glb: ByteArray): ByteArray {
+        try {
+            if (glb.size < 28) return glb
+            val headerBuf = ByteBuffer.wrap(glb, 0, 20).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            val magic = headerBuf.int
+            val version = headerBuf.int
+            val totalLength = headerBuf.int
+            val jsonLen = headerBuf.int
+            val jsonType = headerBuf.int
+            if (magic != 0x46546C67 || version != 2 || jsonLen <= 0 || 20 + jsonLen > glb.size) {
+                return glb
+            }
+
+            val jsonStr = String(glb, 20, jsonLen, Charsets.UTF_8)
+            val root = org.json.JSONObject(jsonStr)
+
+            // Add KHR_materials_unlit to extensionsUsed
+            val extUsed = root.optJSONArray("extensionsUsed") ?: org.json.JSONArray()
+            var hasUnlit = false
+            for (i in 0 until extUsed.length()) {
+                if (extUsed.optString(i) == "KHR_materials_unlit") {
+                    hasUnlit = true
+                    break
+                }
+            }
+            if (!hasUnlit) {
+                extUsed.put("KHR_materials_unlit")
+                root.put("extensionsUsed", extUsed)
+            }
+
+            // Patch each material to unlit + metallicFactor=0
+            val materials = root.optJSONArray("materials")
+            if (materials != null) {
+                for (i in 0 until materials.length()) {
+                    val mat = materials.optJSONObject(i) ?: continue
+                    mat.remove("normalTexture")
+                    val pbr = mat.optJSONObject("pbrMetallicRoughness")
+                    if (pbr != null) {
+                        pbr.remove("metallicRoughnessTexture")
+                        pbr.put("metallicFactor", 0.0)
+                        pbr.put("roughnessFactor", 1.0)
+                    }
+                    val matExt = mat.optJSONObject("extensions") ?: org.json.JSONObject()
+                    matExt.put("KHR_materials_unlit", org.json.JSONObject())
+                    mat.put("extensions", matExt)
+                }
+            }
+
+            var newJsonBytes = root.toString().toByteArray(Charsets.UTF_8)
+            val pad = (4 - (newJsonBytes.size % 4)) % 4
+            if (pad > 0) {
+                val padded = ByteArray(newJsonBytes.size + pad)
+                System.arraycopy(newJsonBytes, 0, padded, 0, newJsonBytes.size)
+                for (i in newJsonBytes.size until padded.size) {
+                    padded[i] = 0x20.toByte()
+                }
+                newJsonBytes = padded
+            }
+
+            val binOffset = 20 + jsonLen
+            val binLen = glb.size - binOffset
+            val newTotalLen = 20 + newJsonBytes.size + binLen
+            val out = ByteArray(newTotalLen)
+            val outHeader = ByteBuffer.wrap(out, 0, 20).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            outHeader.putInt(0x46546C67)
+            outHeader.putInt(2)
+            outHeader.putInt(newTotalLen)
+            outHeader.putInt(newJsonBytes.size)
+            outHeader.putInt(jsonType)
+
+            System.arraycopy(newJsonBytes, 0, out, 20, newJsonBytes.size)
+            System.arraycopy(glb, binOffset, out, 20 + newJsonBytes.size, binLen)
+            return out
+        } catch (e: Exception) {
+            Log.w(TAG, "GLB color patch skipped: ${e.message}")
+            return glb
+        }
     }
 
     // =========================================================================
@@ -722,8 +807,9 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            indirectLight?.intensity = 55_000f
-            mainLightNode?.intensity = 135_000f
+            // Balanced natural exposure so 3D Studio View is never over-bright or washed out
+            indirectLight?.intensity = 28_000f
+            mainLightNode?.intensity = 75_000f
         }
         viewerStageContainer.addView(sceneView)
         studioSceneView = sceneView
@@ -877,11 +963,11 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             planeRenderer.isEnabled = true
             planeRenderer.isVisible = true
 
-            // Keep bright studio daylight IBL & directional lighting instead of letting
+            // Keep natural studio daylight IBL & directional lighting instead of letting
             // indoor camera light estimation darken the 3D landmark textures!
             lightEstimator = null
-            indirectLight?.intensity = 55_000f
-            mainLightNode?.intensity = 135_000f
+            indirectLight?.intensity = 30_000f
+            mainLightNode?.intensity = 80_000f
 
             // Configure ARCore Session with Instant Placement (LOCAL_Y_UP)
             configureSession { session, config ->
@@ -896,9 +982,9 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             }
 
             onSessionUpdated = { session, frame ->
-                // Ensure ambient & main lighting stay bright every frame
-                indirectLight?.intensity = 55_000f
-                mainLightNode?.intensity = 135_000f
+                // Ensure ambient & main lighting stay balanced every frame
+                indirectLight?.intensity = 30_000f
+                mainLightNode?.intensity = 80_000f
 
                 // Automatically place the landmark ~2.0m in front of the user as soon as ARCore tracks
                 if (!autoPlacedInAr && frame.camera.trackingState == TrackingState.TRACKING) {
