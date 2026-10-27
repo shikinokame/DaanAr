@@ -722,6 +722,8 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            indirectLight?.intensity = 55_000f
+            mainLightNode?.intensity = 135_000f
         }
         viewerStageContainer.addView(sceneView)
         studioSceneView = sceneView
@@ -732,6 +734,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             scaleToUnits = 1.75f,
             centerOrigin = Float3(0.0f, 0.0f, 0.0f)
         )
+        forceNonMetallicMaterials(modelNode)
         studioInitialScale = modelNode.scale
         sceneView.addChildNode(modelNode)
         studioModelNode = modelNode
@@ -874,11 +877,17 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             planeRenderer.isEnabled = true
             planeRenderer.isVisible = true
 
+            // Keep bright studio daylight IBL & directional lighting instead of letting
+            // indoor camera light estimation darken the 3D landmark textures!
+            lightEstimator = null
+            indirectLight?.intensity = 55_000f
+            mainLightNode?.intensity = 135_000f
+
             // Configure ARCore Session with Instant Placement (LOCAL_Y_UP)
             configureSession { session, config ->
                 config.instantPlacementMode = Config.InstantPlacementMode.LOCAL_Y_UP
                 config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
-                config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
+                config.lightEstimationMode = Config.LightEstimationMode.DISABLED
                 if (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
                     config.depthMode = Config.DepthMode.AUTOMATIC
                 } else {
@@ -887,6 +896,10 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             }
 
             onSessionUpdated = { session, frame ->
+                // Ensure ambient & main lighting stay bright every frame
+                indirectLight?.intensity = 55_000f
+                mainLightNode?.intensity = 135_000f
+
                 // Automatically place the landmark ~2.0m in front of the user as soon as ARCore tracks
                 if (!autoPlacedInAr && frame.camera.trackingState == TrackingState.TRACKING) {
                     val placed = placeOrMoveModelAtScreenPoint(
@@ -1112,6 +1125,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             scaleToUnits = baseArScale,
             centerOrigin = Float3(0.0f, -0.5f, 0.0f)
         )
+        forceNonMetallicMaterials(modelNode)
         initialNodeScale = modelNode.scale
 
         anchorNode.addChildNode(modelNode)
@@ -1147,6 +1161,24 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             initialNodeScale.z * userScaleMultiplier
         )
         node.rotation = Float3(0f, arRotationYawDeg, 0f)
+    }
+
+    /**
+     * Ensures any loaded glTF/GLB material (including future admin uploads) renders as matte
+     * heritage stone/wood (`metallicFactor = 0.0f`, `roughnessFactor = 0.85f`) instead of dark
+     * shiny chrome.
+     */
+    private fun forceNonMetallicMaterials(node: ModelNode) {
+        try {
+            node.modelInstance.materialInstances.forEach { mat ->
+                try {
+                    mat.setParameter("metallicFactor", 0.0f)
+                } catch (_: Exception) {}
+                try {
+                    mat.setParameter("roughnessFactor", 0.85f)
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
     }
 
     private fun exitArModeToStudio() {
