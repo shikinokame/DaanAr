@@ -9,24 +9,27 @@ class CategoryBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = AppColors.categoryColors[category] ?? AppColors.textMuted;
+    final color = AppColors.categoryColors[category] ?? AppColors.ink;
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: small ? 8 : 10,
-        vertical: small ? 3 : 5,
+        horizontal: small ? 6 : 9,
+        vertical: small ? 3 : 4,
       ),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        color: color,
+        border: Border.all(
+          color: AppColors.surface.withValues(alpha: 0.35),
+          width: 0.6,
+        ),
       ),
       child: Text(
-        category[0].toUpperCase() + category.substring(1),
+        category.toUpperCase(),
         style: TextStyle(
-          fontSize: small ? 10 : 12,
-          fontWeight: FontWeight.w600,
-          color: color,
-          letterSpacing: 0.3,
+          fontFamily: AppFonts.sans,
+          fontSize: small ? 9.0 : 10.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.surface,
+          letterSpacing: 1.1,
         ),
       ),
     );

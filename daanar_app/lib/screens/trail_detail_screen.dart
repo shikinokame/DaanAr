@@ -7,6 +7,7 @@ import '../models/landmark.dart';
 import '../models/trail.dart';
 import '../providers/trail_providers.dart';
 import '../providers/trail_navigation_provider.dart';
+import '../widgets/archival.dart';
 import '../widgets/shimmer_loading.dart';
 import 'ar_view_screen.dart';
 
@@ -70,7 +71,27 @@ class _TrailDetailScreenState extends ConsumerState<TrailDetailScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Heritage Trail'),
+        title: Column(
+          children: [
+            Text(
+              'ITINERARY DOSSIER',
+              style: AppText.eyebrow.copyWith(
+                color: AppColors.brass,
+                fontSize: 9.5,
+              ),
+            ),
+            const SizedBox(height: 1),
+            const Text(
+              'Heritage Walking Route',
+              style: TextStyle(
+                fontFamily: AppFonts.serif,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.surface,
+              ),
+            ),
+          ],
+        ),
         actions: [
           if (session.completedStopIds.isNotEmpty ||
               session.skippedStopIds.isNotEmpty)
@@ -82,297 +103,310 @@ class _TrailDetailScreenState extends ConsumerState<TrailDetailScreen> {
               },
               icon: const Icon(
                 Icons.refresh_rounded,
-                size: 16,
-                color: AppColors.secondary,
+                size: 15,
+                color: AppColors.brass,
               ),
-              label: const Text(
-                'Reset Progress',
-                style: TextStyle(color: AppColors.secondary, fontSize: 12),
+              label: Text(
+                'RESET',
+                style: AppText.action.copyWith(color: AppColors.brass),
               ),
             ),
         ],
       ),
-      body: trailAsync.when(
-        loading: () => const ShimmerList(count: 4),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: AppColors.textMuted,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Could not load trail: $e',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textMuted),
-                ),
-              ],
+      body: PaperBackground(
+        child: trailAsync.when(
+          loading: () => const ShimmerList(count: 4),
+          error: (e, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: AppColors.textMuted,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Could not load trail: $e',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.textMuted),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        data: (result) {
-          final trail = result.trail;
-          final stops = trail.landmarks;
-          final polylinePoints = trail.fullPolylinePoints;
+          data: (result) {
+            final trail = result.trail;
+            final stops = trail.landmarks;
+            final polylinePoints = trail.fullPolylinePoints;
 
-          final markers = <Marker>{
-            for (int i = 0; i < stops.length; i++)
-              Marker(
-                markerId: MarkerId('trail_stop_${stops[i].id}'),
-                position: LatLng(stops[i].lat, stops[i].lng),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  session.completedStopIds.contains(stops[i].id)
-                      ? BitmapDescriptor.hueGreen
-                      : BitmapDescriptor.hueOrange,
+            final markers = <Marker>{
+              for (int i = 0; i < stops.length; i++)
+                Marker(
+                  markerId: MarkerId('trail_stop_${stops[i].id}'),
+                  position: LatLng(stops[i].lat, stops[i].lng),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                    session.completedStopIds.contains(stops[i].id)
+                        ? BitmapDescriptor.hueGreen
+                        : BitmapDescriptor.hueOrange,
+                  ),
+                  infoWindow: InfoWindow(
+                    title: 'Stop ${i + 1}: ${stops[i].name}',
+                    snippet: stops[i].municipality?.name ?? stops[i].address,
+                  ),
                 ),
-                infoWindow: InfoWindow(
-                  title: 'Stop ${i + 1}: ${stops[i].name}',
-                  snippet: stops[i].municipality?.name ?? stops[i].address,
+            };
+
+            final polylines = <Polyline>{
+              if (polylinePoints.length >= 2)
+                Polyline(
+                  polylineId: const PolylineId('trail_preview_line'),
+                  points: polylinePoints,
+                  color: AppColors.primary,
+                  width: 5,
                 ),
-              ),
-          };
+            };
 
-          final polylines = <Polyline>{
-            if (polylinePoints.length >= 2)
-              Polyline(
-                polylineId: const PolylineId('trail_preview_line'),
-                points: polylinePoints,
-                color: AppColors.primary,
-                width: 5,
-              ),
-          };
+            final initialTarget = stops.isNotEmpty
+                ? LatLng(stops.first.lat, stops.first.lng)
+                : const LatLng(16.0432, 120.3338);
 
-          final initialTarget = stops.isNotEmpty
-              ? LatLng(stops.first.lat, stops.first.lng)
-              : const LatLng(16.0432, 120.3338);
+            final hasProgress = session.completedStopIds.isNotEmpty ||
+                session.currentStopIndex > 0;
 
-          final hasProgress = session.completedStopIds.isNotEmpty ||
-              session.currentStopIndex > 0;
-
-          return Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  children: [
-                    // ── Map Preview with Numbered Stops & Route Polyline ──
-                    SizedBox(
-                      height: 230,
-                      child: Stack(
-                        children: [
-                          GoogleMap(
-                            initialCameraPosition: CameraPosition(
-                              target: initialTarget,
-                              zoom: 12.2,
-                            ),
-                            markers: markers,
-                            polylines: polylines,
-                            myLocationButtonEnabled: false,
-                            zoomControlsEnabled: false,
-                            onMapCreated: (ctrl) {
-                              _mapController = ctrl;
-                              Future.delayed(
-                                const Duration(milliseconds: 250),
-                                () => _fitTrailBounds(trail),
-                              );
-                            },
-                          ),
-                          Positioned(
-                            top: 12,
-                            left: 12,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(
-                                  alpha: 0.92,
+            return Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      // ── Map Preview Plate ──────────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: EngravedFrame(
+                          fill: AppColors.surface,
+                          padding: const EdgeInsets.all(8),
+                          child: SizedBox(
+                            height: 215,
+                            child: Stack(
+                              children: [
+                                GoogleMap(
+                                  initialCameraPosition: CameraPosition(
+                                    target: initialTarget,
+                                    zoom: 12.2,
+                                  ),
+                                  markers: markers,
+                                  polylines: polylines,
+                                  myLocationButtonEnabled: false,
+                                  zoomControlsEnabled: false,
+                                  onMapCreated: (ctrl) {
+                                    _mapController = ctrl;
+                                    Future.delayed(
+                                      const Duration(milliseconds: 250),
+                                      () => _fitTrailBounds(trail),
+                                    );
+                                  },
                                 ),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                trail.coverageLabel,
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                                Positioned(
+                                  top: 8,
+                                  left: 8,
+                                  child: ArchivalStamp(
+                                    trail.coverageLabel,
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
 
-                    // ── Trail Header & Key Metrics ────────────────────────
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      color: AppColors.cardBg,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            trail.name,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.charcoal,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            trail.description,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              height: 1.45,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
+                      // ── Trail Header & Key Metrics ─────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                        child: EngravedFrame(
+                          fill: AppColors.surface,
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _MetricChip(
-                                icon: Icons.flag_rounded,
-                                label: '${stops.length} Stops',
+                              FolioLabel(trail.id),
+                              const SizedBox(height: 6),
+                              Text(
+                                trail.name,
+                                style: const TextStyle(
+                                  fontFamily: AppFonts.serif,
+                                  fontSize: 25,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                  height: 1.12,
+                                ),
                               ),
-                              const SizedBox(width: 8),
-                              _MetricChip(
-                                icon: Icons.route_rounded,
-                                label: trail.distanceLabel,
+                              const SizedBox(height: 10),
+                              Text(
+                                trail.description,
+                                style: const TextStyle(
+                                  fontFamily: AppFonts.sans,
+                                  fontSize: 13.5,
+                                  height: 1.55,
+                                  color: AppColors.charcoal,
+                                ),
                               ),
-                              const SizedBox(width: 8),
-                              _MetricChip(
-                                icon: Icons.schedule_rounded,
-                                label: trail.durationLabel,
-                              ),
-                              const SizedBox(width: 8),
-                              _MetricChip(
-                                icon: Icons.terrain_rounded,
-                                label: trail.difficulty.toUpperCase(),
+                              const SizedBox(height: 14),
+                              const OrnamentDivider(),
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  _MetricChip(
+                                    icon: Icons.flag_outlined,
+                                    label: '${stops.length} STOPS',
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _MetricChip(
+                                    icon: Icons.route_outlined,
+                                    label: trail.distanceLabel.toUpperCase(),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _MetricChip(
+                                    icon: Icons.schedule_outlined,
+                                    label: trail.durationLabel.toUpperCase(),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _MetricChip(
+                                    icon: Icons.terrain_outlined,
+                                    label: trail.difficulty.toUpperCase(),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-
-                    const Divider(height: 1, color: AppColors.divider),
-
-                    // ── Ordered Stops Timeline ────────────────────────────
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Ordered Trail Stops',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.charcoal,
-                            ),
-                          ),
-                          Text(
-                            '${session.completedStopIds.length} of ${stops.length} visited',
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    ...List.generate(stops.length, (i) {
-                      final stop = stops[i];
-                      final isDone = session.completedStopIds.contains(stop.id);
-                      final isCurrent = session.currentStopIndex == i &&
-                          !session.isCompleted;
-                      final nextSeg = trail.segmentToStop(i + 1);
-
-                      return _TrailStopCard(
-                        stopNumber: i + 1,
-                        landmark: stop,
-                        isCompleted: isDone,
-                        isCurrent: isCurrent,
-                        nextSegment: nextSeg,
-                        onTapLandmark: () =>
-                            context.push('/landmarks/${stop.id}'),
-                        onLaunchAr: stop.isArReady
-                            ? () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => ARViewScreen(
-                                      landmarkId: stop.id,
-                                      landmarkName: stop.name,
-                                    ),
-                                  ),
-                                );
-                              }
-                            : null,
-                      );
-                    }),
-
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-
-              // ── Sticky Start / Resume Trail CTA ─────────────────────────
-              Container(
-                padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBg,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 12,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: stops.isEmpty
-                          ? null
-                          : () => context.push(
-                              '/trails/${trail.id}/navigate',
-                            ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      icon: const Icon(Icons.navigation_rounded),
-                      label: Text(
-                        hasProgress && !session.isCompleted
-                            ? 'Resume Trail (Stop ${session.currentStopIndex + 1} of ${stops.length})'
-                            : 'Start Guided Heritage Trail',
-                        style: const TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.bold,
+
+                      // ── Ordered Stops Timeline ─────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'FIELD GUIDE SEQUENCE',
+                                  style: AppText.eyebrow,
+                                ),
+                                const SizedBox(height: 2),
+                                const Text(
+                                  'Ordered Trail Stops',
+                                  style: AppText.sectionTitle,
+                                ),
+                              ],
+                            ),
+                            Text(
+                              '${session.completedStopIds.length} OF ${stops.length} VISITED',
+                              style: AppText.meta.copyWith(
+                                color: AppColors.brassInk,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      ...List.generate(stops.length, (i) {
+                        final stop = stops[i];
+                        final isDone =
+                            session.completedStopIds.contains(stop.id);
+                        final isCurrent = session.currentStopIndex == i &&
+                            !session.isCompleted;
+                        final nextSeg = trail.segmentToStop(i + 1);
+
+                        return _TrailStopCard(
+                          stopNumber: i + 1,
+                          landmark: stop,
+                          isCompleted: isDone,
+                          isCurrent: isCurrent,
+                          nextSegment: nextSeg,
+                          onTapLandmark: () =>
+                              context.push('/landmarks/${stop.id}'),
+                          onLaunchAr: stop.isArReady
+                              ? () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ARViewScreen(
+                                        landmarkId: stop.id,
+                                        landmarkName: stop.name,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              : null,
+                        );
+                      }),
+
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+
+                // ── Sticky Start / Resume Trail CTA ──────────────────────────
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surface,
+                    border: Border(
+                      top: BorderSide(color: AppColors.rule, width: 1),
+                    ),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: stops.isEmpty
+                            ? null
+                            : () => context.push(
+                                  '/trails/${trail.id}/navigate',
+                                ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: AppColors.surface,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(2),
+                            side: const BorderSide(
+                              color: AppColors.brass,
+                              width: 0.9,
+                            ),
+                          ),
+                        ),
+                        icon: const Icon(
+                          Icons.explore_outlined,
+                          color: AppColors.brass,
+                          size: 19,
+                        ),
+                        label: Text(
+                          hasProgress && !session.isCompleted
+                              ? 'RESUME TRAIL (STOP ${session.currentStopIndex + 1} OF ${stops.length})'
+                              : 'BEGIN GUIDED HERITAGE TRAIL',
+                          style: const TextStyle(
+                            fontFamily: AppFonts.sans,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.4,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -388,24 +422,24 @@ class _MetricChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
           color: AppColors.background,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.divider),
+          borderRadius: BorderRadius.circular(2),
+          border: Border.all(color: AppColors.rule, width: 0.9),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 16, color: AppColors.primary),
+            Icon(icon, size: 15, color: AppColors.brassInk),
             const SizedBox(height: 4),
             Text(
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppColors.charcoal,
+              style: AppText.meta.copyWith(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
               ),
             ),
           ],
@@ -436,123 +470,143 @@ class _TrailStopCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final numLabel = stopNumber.toString().padLeft(2, '0');
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
-            onTap: onTapLandmark,
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.cardBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isCurrent
-                      ? AppColors.primary
-                      : (isCompleted
-                          ? Colors.green.shade400
-                          : AppColors.divider),
-                  width: isCurrent ? 2 : 1,
-                ),
+          Material(
+            color: isCurrent ? AppColors.primary : AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(2),
+              side: BorderSide(
+                color: isCurrent
+                    ? AppColors.primary
+                    : (isCompleted ? AppColors.brassInk : AppColors.rule),
+                width: isCurrent ? 1.4 : 1.0,
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: isCompleted
-                          ? Colors.green.shade600
-                          : (isCurrent
-                              ? AppColors.primary
-                              : AppColors.secondary),
-                      shape: BoxShape.circle,
+            ),
+            child: InkWell(
+              onTap: onTapLandmark,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: isCompleted
+                            ? AppColors.primary
+                            : (isCurrent
+                                ? AppColors.brass
+                                : AppColors.background),
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(
+                          color: isCurrent
+                              ? AppColors.brass
+                              : AppColors.rule,
+                          width: 1,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: isCompleted
+                          ? const Icon(
+                              Icons.check_rounded,
+                              size: 17,
+                              color: AppColors.brass,
+                            )
+                          : Text(
+                              numLabel,
+                              style: TextStyle(
+                                fontFamily: AppFonts.serif,
+                                fontSize: 15,
+                                fontStyle: FontStyle.italic,
+                                fontWeight: FontWeight.w700,
+                                color: isCurrent
+                                    ? AppColors.inkDeep
+                                    : AppColors.brassInk,
+                              ),
+                            ),
                     ),
-                    alignment: Alignment.center,
-                    child: isCompleted
-                        ? const Icon(
-                            Icons.check_rounded,
-                            size: 18,
-                            color: Colors.white,
-                          )
-                        : Text(
-                            '$stopNumber',
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            landmark.name,
                             style: TextStyle(
-                              fontWeight: FontWeight.bold,
+                              fontFamily: AppFonts.serif,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
                               color: isCurrent
-                                  ? Colors.white
-                                  : AppColors.charcoal,
+                                  ? AppColors.surface
+                                  : AppColors.primary,
+                              height: 1.15,
                             ),
                           ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          landmark.name,
-                          style: const TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.charcoal,
+                          const SizedBox(height: 3),
+                          Text(
+                            (landmark.municipality?.name ?? landmark.address)
+                                .toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.meta.copyWith(
+                              color: isCurrent
+                                  ? AppColors.brass
+                                  : AppColors.textMuted,
+                              fontSize: 9.5,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          landmark.municipality?.name ?? landmark.address,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (onLaunchAr != null)
-                    IconButton(
-                      onPressed: onLaunchAr,
-                      tooltip: 'View 3D / AR',
-                      icon: const Icon(
-                        Icons.view_in_ar_rounded,
-                        color: AppColors.primary,
+                        ],
                       ),
                     ),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.textMuted,
-                  ),
-                ],
+                    if (onLaunchAr != null)
+                      IconButton(
+                        onPressed: onLaunchAr,
+                        tooltip: 'View 3D / AR',
+                        icon: Icon(
+                          Icons.view_in_ar_outlined,
+                          size: 20,
+                          color: isCurrent
+                              ? AppColors.brass
+                              : AppColors.primary,
+                        ),
+                      ),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 17,
+                      color: isCurrent ? AppColors.brass : AppColors.brassInk,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-
           if (nextSegment != null)
             Padding(
               padding: const EdgeInsets.only(left: 30, top: 6, bottom: 6),
               child: Row(
                 children: [
                   Container(
-                    width: 2,
+                    width: 1,
                     height: 22,
-                    color: AppColors.primary.withValues(alpha: 0.35),
+                    color: AppColors.rule,
                   ),
                   const SizedBox(width: 10),
-                  Icon(
-                    Icons.directions_car_filled_outlined,
-                    size: 14,
-                    color: AppColors.textMuted.withValues(alpha: 0.8),
+                  const Icon(
+                    Icons.directions_walk_outlined,
+                    size: 13,
+                    color: AppColors.brassInk,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 5),
                   Text(
-                    'Next leg: ${nextSegment!.distanceLabel} • ~${nextSegment!.durationLabel}',
-                    style: const TextStyle(
-                      fontSize: 11.5,
+                    'NEXT LEG: ${nextSegment!.distanceLabel.toUpperCase()}  •  ~${nextSegment!.durationLabel.toUpperCase()}',
+                    style: AppText.meta.copyWith(
+                      fontSize: 9.5,
                       color: AppColors.textMuted,
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],

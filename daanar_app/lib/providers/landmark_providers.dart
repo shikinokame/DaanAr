@@ -49,9 +49,9 @@ class LandmarkFilterNotifier extends Notifier<LandmarkFilter> {
   LandmarkFilter build() => const LandmarkFilter();
 
   void setMunicipality(String? value) =>
-      state = state.copyWith(municipality: value);
+      state = LandmarkFilter(municipality: value, category: state.category);
   void setCategory(String? value) =>
-      state = state.copyWith(category: value);
+      state = LandmarkFilter(municipality: state.municipality, category: value);
   void reset() => state = const LandmarkFilter();
 }
 
