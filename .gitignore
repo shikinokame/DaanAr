@@ -31,6 +31,8 @@ daanar_app/.flutter-plugins-dependencies
 daanar_app/.pub/
 daanar_app/.pub-cache/
 daanar_app/build/
+daanar_app/android/build/
+daanar_app/devtools_options.yaml
 daanar_app/android/app/debug/
 daanar_app/android/app/profile/
 daanar_app/android/app/release/
