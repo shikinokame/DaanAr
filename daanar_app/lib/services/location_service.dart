@@ -44,7 +44,7 @@ class LocationService {
   }
 
   /// Returns a continuous stream of GPS positions for live navigation.
-  /// Only starts after permission is confirmed — call [getCurrentPosition] first.
+  /// Only starts after permission is confirmed call [getCurrentPosition] first.
   static Stream<Position> getPositionStream() {
     return Geolocator.getPositionStream(
       locationSettings: const LocationSettings(

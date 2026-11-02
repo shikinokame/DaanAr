@@ -73,7 +73,7 @@ final landmarkFilterProvider =
   LandmarkFilterNotifier.new,
 );
 
-/// Filtered landmark list — reacts to filter changes.
+/// Filtered landmark list reacts to filter changes.
 final filteredLandmarksProvider = FutureProvider<LandmarkResult>((ref) async {
   final filter = ref.watch(landmarkFilterProvider);
   final service = ref.read(landmarkServiceProvider);

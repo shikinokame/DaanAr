@@ -5,7 +5,7 @@ import 'constants.dart';
 import 'router.dart';
 import 'token_storage.dart';
 
-/// Global Dio provider — single instance reused across all services.
+/// Global Dio provider single instance reused across all services.
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
 class ApiClient {

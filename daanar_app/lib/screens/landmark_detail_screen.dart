@@ -62,7 +62,7 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
             );
       }
     } catch (_) {
-      // Location unavailable — GeofenceService stream will still handle background checks
+      // Location unavailable GeofenceService stream will still handle background checks
     }
   }
 
@@ -226,7 +226,7 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      'Fig. ${landmark.id.toString().padLeft(2, '0')} — ${landmark.municipality?.name ?? 'Pangasinan'} Archive',
+                                      'Fig. ${landmark.id.toString().padLeft(2, '0')} ${landmark.municipality?.name ?? 'Pangasinan'} Archive',
                                       style: AppText.folio.copyWith(fontSize: 13.5),
                                     ),
                                   ),

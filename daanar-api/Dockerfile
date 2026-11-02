@@ -1,5 +1,5 @@
 # =============================================================================
-# DaanAR Laravel API — Railway Dockerfile
+# DaanAR Laravel API Railway Dockerfile
 # =============================================================================
 # Uses the official PHP 8.4 CLI image with all required extensions installed,
 # because Railway's Nixpacks/FrankenPHP builder does NOT load gd, intl, bcmath,

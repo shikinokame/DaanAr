@@ -4,9 +4,9 @@
     <!-- Location permissions for GPS navigation -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <!-- Background location — needed for geofence arrival alerts when app is minimized -->
+    <!-- Background location needed for geofence arrival alerts when app is minimized -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
-    <!-- Notifications — required on Android 13+ to show arrival alerts -->
+    <!-- Notifications required on Android 13+ to show arrival alerts -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Keep GPS alive for geofencing -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
@@ -47,7 +47,7 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:screenOrientation="portrait" />
-        <!-- Google Maps API Key — replace with your key from Google Cloud Console -->
+        <!-- Google Maps API Key replace with your key from Google Cloud Console -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDURcYtFVl4Q4WynSx9co2uCUEv_hExoig"/>

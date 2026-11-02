@@ -5,10 +5,10 @@ use App\Http\Controllers\LandingController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 
-// Landing page — serves featured landmarks + municipalities from DB
+// Landing page serves featured landmarks + municipalities from DB
 Route::get('/', [LandingController::class, 'index']);
 
-// WebAR experience — opened via WebView in Flutter
+// WebAR experience opened via WebView in Flutter
 Route::get('/ar/landmark/{id}', [ArController::class, 'show'])->name('ar.landmark');
 
 // Path-based cache-buster for Google Scene Viewer (MainActivity.kt calls .clearQuery(),
@@ -29,7 +29,7 @@ Route::get('/ar/test', function () {
     return view('ar.test');
 })->name('ar.test');
 
-// TEMP DEBUG — remove after fixing 500 errors
+// TEMP DEBUG remove after fixing 500 errors
 Route::get('/debug/db-check', function () {
     $secret = request('secret');
     if ($secret !== 'daanar2024debug') {

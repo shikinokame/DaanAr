@@ -31,7 +31,7 @@ class ArController extends Controller
             ? 'https://' . $request->getHttpHost()
             : $request->getSchemeAndHttpHost();
 
-        // Resolve model URL — use path-based cache-buster (/storage/ar-models/v8_<ts>/<file>.glb)
+        // Resolve model URL use path-based cache-buster (/storage/ar-models/v8_<ts>/<file>.glb)
         // because MainActivity.kt calls .clearQuery() which strips ?sv= query strings.
         $version = 'v8_' . ($landmark->updated_at?->timestamp ?? 0);
         $modelUrl = $landmark->ar_model_url

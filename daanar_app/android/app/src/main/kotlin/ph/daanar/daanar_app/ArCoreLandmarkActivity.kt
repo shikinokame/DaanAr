@@ -1073,7 +1073,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
 
     /**
      * Moves or creates the ARCore anchor at screen coordinate `(px, py)` WITHOUT destroying/recreating
-     * the `ModelNode` if it already exists—making floor dragging fast and lag-free!
+     * the `ModelNode` if it already exists making floor dragging fast and lag-free!
      */
     private fun placeOrMoveModelAtScreenPoint(
         frame: Frame,

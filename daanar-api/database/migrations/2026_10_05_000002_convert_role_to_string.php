@@ -16,7 +16,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Widen to VARCHAR — works even if a previous migration already did this
+        // Widen to VARCHAR works even if a previous migration already did this
         DB::statement("ALTER TABLE users MODIFY COLUMN role VARCHAR(20) NOT NULL DEFAULT 'officer'");
 
         // Normalise legacy role value

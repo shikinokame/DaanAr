@@ -44,13 +44,13 @@ Route::prefix('v1')->group(function () {
 
         Route::post('analytics/log-event', [AnalyticsController::class, 'logEvent']);
 
-        // Landmarks — featured must be declared before {landmark} to avoid route clash
+        // Landmarks featured must be declared before {landmark} to avoid route clash
         Route::prefix('landmarks')->group(function () {
             Route::get('featured', [LandmarkController::class, 'featured']);
             Route::get('/',        [LandmarkController::class, 'index']);
             Route::get('{landmark}', [LandmarkController::class, 'show']);
 
-            // Log a visit — backwards-compatible wrapper around split analytics
+            // Log a visit backwards-compatible wrapper around split analytics
             Route::post('{landmark}/visit', function (
                 \Illuminate\Http\Request $request,
                 \App\Models\Landmark $landmark

@@ -36,17 +36,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Landmark? _routeDestination;
   bool _isCalculatingRoute = false;
 
-  // Stage 3 — live navigation state
+  // Stage 3 live navigation state
   StreamSubscription<dynamic>? _positionSubscription;
   bool _isNavMode = false;
   LatLng? _livePosition;          // updates every ≥5 m moved
   double? _remainingMetres;       // straight-line to destination (live)
   bool _autoCenter = true;        // camera follows user when true
 
-  // Stage 4 — rerouting state
+  // Stage 4 rerouting state
   bool _isRerouting = false;
 
-  // Stage 5 — AR proximity & physical visit state
+  // Stage 5 AR proximity & physical visit state
   bool _arPromptShown = false;
   bool _showArProximityBanner = false;
   bool _physicalVisitLogged = false;
@@ -184,7 +184,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         _mapController!.animateCamera(CameraUpdate.newLatLng(newPos));
       }
 
-      // Stage 4: deviation check — reroute if walked off the route
+      // Stage 4: deviation check reroute if walked off the route
       _checkAndReroute(newPos, destination);
 
       // Log PHYSICAL_VISIT when entering 100m geofence radius
@@ -200,7 +200,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             );
       }
 
-      // Stage 5: AR proximity — trigger banner when within 50 m of destination
+      // Stage 5: AR proximity trigger banner when within 50 m of destination
       if (!_arPromptShown &&
           remaining <= AppConstants.arProximityMetres) {
         setState(() {
@@ -542,7 +542,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
 
-          // ── FABs (hidden during nav — panel has recenter button) ──────────
+          // ── FABs (hidden during nav panel has recenter button) ──────────
           if (!_isNavMode)
             Positioned(
               bottom: _selectedLandmark != null ? 140 : 16,
@@ -643,14 +643,14 @@ class _LiveNavPanel extends StatelessWidget {
 
   String get _distanceLabel {
     final m = remainingMetres ?? initialRoute?.distanceMetres;
-    if (m == null) return '—';
+    if (m == null) return ' ';
     if (m >= 1000) return '${(m / 1000).toStringAsFixed(1)} km';
     return '${m.toStringAsFixed(0)} m';
   }
 
   String get _etaLabel {
     final m = remainingMetres ?? initialRoute?.distanceMetres;
-    if (m == null) return '—';
+    if (m == null) return ' ';
     // Use transport mode speed for ETA (m/s)
     final minutes = (m / (mode.speedMetresPerSec * 60)).ceil();
     if (minutes < 60) return '$minutes min';

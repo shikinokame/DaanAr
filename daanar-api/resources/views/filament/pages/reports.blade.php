@@ -29,7 +29,7 @@
 
     {{-- Print-only Report Header --}}
     <div class="print-only-header mb-4 border-b border-gray-300 pb-3">
-        <h1 class="text-xl font-bold">DaanAR — Landmark Visit Analytics Report</h1>
+        <h1 class="text-xl font-bold">DaanAR Landmark Visit Analytics Report</h1>
         <p class="text-sm text-gray-600">
             Period: <strong>{{ $stats['period_label'] }}</strong> • Generated: {{ now()->format('M d, Y h:i A') }}
         </p>

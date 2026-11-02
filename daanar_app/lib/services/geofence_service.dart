@@ -7,7 +7,7 @@ import '../services/landmark_service.dart';
 import '../services/notification_service.dart';
 import '../services/location_service.dart';
 
-/// Radius in metres — a physical visit is triggered when the user enters this 100m zone.
+/// Radius in metres a physical visit is triggered when the user enters this 100m zone.
 const double kGeofenceRadiusMetres = AppConstants.physicalVisitRadiusMetres; // 100.0m
 
 /// Minimum seconds between repeated notifications/logs for the same landmark.

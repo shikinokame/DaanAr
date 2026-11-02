@@ -20,7 +20,7 @@ class ResetAdminPassword extends Command
         if ($updated) {
             $this->info('Admin password reset successfully.');
         } else {
-            $this->warn('admin@daanar.ph user not found — seeder may not have run yet.');
+            $this->warn('admin@daanar.ph user not found seeder may not have run yet.');
         }
 
         return self::SUCCESS;

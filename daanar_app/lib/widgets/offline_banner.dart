@@ -25,7 +25,7 @@ class OfflineBanner extends StatelessWidget {
             const SizedBox(width: 8),
             const Expanded(
               child: Text(
-                'Archival Offline Mode — viewing locally preserved records',
+                'Archival Offline Mode viewing locally preserved records',
                 style: TextStyle(
                   fontFamily: AppFonts.sans,
                   color: AppColors.charcoal,

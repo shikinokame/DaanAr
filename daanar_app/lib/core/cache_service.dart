@@ -20,7 +20,7 @@ class CacheService {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! List) {
-        // Corrupted / unexpected format — purge it
+        // Corrupted / unexpected format purge it
         await prefs.remove(_prefix + key);
         return null;
       }

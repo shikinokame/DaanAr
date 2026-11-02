@@ -14,7 +14,7 @@ class ApiTestScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('DaanAR — API Test'),
+        title: const Text('DaanAR API Test'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -79,7 +79,7 @@ class ApiTestScreen extends ConsumerWidget {
                   const Icon(Icons.check_circle, color: Colors.green),
                   const SizedBox(width: 8),
                   Text(
-                    '✅ API Connected — ${result.landmarks.length} landmarks loaded',
+                    '✅ API Connected ${result.landmarks.length} landmarks loaded',
                     style: const TextStyle(
                       color: Colors.green,
                       fontWeight: FontWeight.bold,

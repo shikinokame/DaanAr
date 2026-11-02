@@ -1,4 +1,4 @@
-# DaanAR — End-to-End Test Checklist
+# DaanAR End-to-End Test Checklist
 
 > Use this file to manually verify the entire system works before deployment or release.
 > Check off each item as you confirm it passes.
@@ -26,17 +26,17 @@
 
 ---
 
-## 📱 Flutter App — Map
+## 📱 Flutter App Map
 
 - [ ] **12.** Open the Flutter app on device
 - [ ] **13.** Go to **Map** tab → tap "My Location" → GPS blue dot appears
 - [ ] **14.** New landmark appears as a map pin at correct coordinates
 - [ ] **15.** Tap landmark pin → bottom sheet appears with correct name and description
-- [ ] **16.** Municipality filter works — shows only landmarks in selected municipality
+- [ ] **16.** Municipality filter works shows only landmarks in selected municipality
 
 ---
 
-## 🧭 Flutter App — Navigation
+## 🧭 Flutter App Navigation
 
 - [ ] **17.** Tap "Navigate" on a landmark → route line drawn on map
 - [ ] **18.** "Recenter" button appears when map is scrolled away
@@ -59,7 +59,7 @@
 ## ⚠️ Error States
 
 - [ ] **27.** Open AR on a landmark with **no 3D model** → page handles gracefully (no crash)
-- [ ] **28.** Turn off PHP server → Flutter app shows "Offline mode — showing cached data"
+- [ ] **28.** Turn off PHP server → Flutter app shows "Offline mode showing cached data"
 - [ ] **29.** Open admin panel at Railway production URL → loads and functions correctly
 
 ---

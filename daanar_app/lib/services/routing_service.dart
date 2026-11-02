@@ -89,7 +89,7 @@ class RoutingService {
     final geometry = feature['geometry'] as Map<String, dynamic>;
     final properties = feature['properties'] as Map<String, dynamic>;
 
-    // Extract full road polyline — ORS returns [lng, lat] pairs
+    // Extract full road polyline ORS returns [lng, lat] pairs
     final rawCoords =
         (geometry['coordinates'] as List<dynamic>).cast<List<dynamic>>();
     final points = rawCoords

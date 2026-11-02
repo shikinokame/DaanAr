@@ -257,7 +257,7 @@ class Reports extends Page implements HasTable
             'unique_physical_only'  => $uniquePhysicalVisitors,
             'total_ar_views'        => $totalArViews,
             'today_ar_views'        => $todayArViews,
-            'most_visited_site'     => $hasActivity ? $topRow->name : '—',
+            'most_visited_site'     => $hasActivity ? $topRow->name : ' ',
             'most_visited_physical' => $hasActivity ? (int) $topRow->total_physical_visits : 0,
             'most_visited_ar'       => $hasActivity ? (int) $topRow->viewed_in_ar : 0,
         ];

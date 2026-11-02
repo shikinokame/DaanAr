@@ -59,7 +59,7 @@ class DaanArSeeder extends Seeder
             $municipalities->put($m->name, $m);
         }
 
-        // Use firstOrCreate — NOT updateOrCreate — so the password is hashed ONCE.
+        // Use firstOrCreate NOT updateOrCreate so the password is hashed ONCE.
         // updateOrCreate re-hashes on every `db:seed --force`, breaking login.
         User::firstOrCreate(
             ['email' => 'admin@daanar.ph'],
@@ -164,7 +164,7 @@ class DaanArSeeder extends Seeder
             [
                 'municipality' => 'Mangaldan',
                 'name' => 'PNR Mangaldan Station',
-                'description' => 'The PNR Mangaldan Station was an integral station on the Manila Railroad Company’s northern line extension extending from Dagupan toward San Fabian and La Union. During the early 20th century, the station spurred Mangaldan’s agricultural commerce—particularly carabao livestock and processed meat trading—into a thriving regional enterprise.',
+                'description' => 'The PNR Mangaldan Station was an integral station on the Manila Railroad Company’s northern line extension extending from Dagupan toward San Fabian and La Union. During the early 20th century, the station spurred Mangaldan’s agricultural commerce particularly carabao livestock and processed meat trading into a thriving regional enterprise.',
                 'short_description' => 'Historic railroad station on the Northern Luzon line extension.',
                 'category' => 'historical',
                 'era' => 'American Colonial',
@@ -247,7 +247,7 @@ class DaanArSeeder extends Seeder
 
             // Media files (3D models / hero images) are managed by admins in the
             // Filament panel. This seeder runs on EVERY deploy (`db:seed --force`),
-            // so never overwrite media on an existing landmark — otherwise each
+            // so never overwrite media on an existing landmark otherwise each
             // redeploy reverts admin uploads back to the seeded file paths.
             if ($lm->exists) {
                 foreach (['ar_model_url', 'hero_image'] as $mediaField) {
@@ -272,7 +272,7 @@ class DaanArSeeder extends Seeder
                 'district'       => 'District 4 (Dagupan • Mangaldan • San Jacinto • San Fabian)',
                 'difficulty'     => 'moderate',
                 'estimated_time' => 95,
-                'description'    => 'Flagship multi-town heritage circuit across Pangasinan’s 4th District—starting from Dagupan City’s Spanish-era cathedral and 1892 railway terminus, passing through Mangaldan and San Jacinto’s centuries-old parishes and 1899 battlefield, and culminating along the coastal heritage sites of San Fabian.',
+                'description'    => 'Flagship multi-town heritage circuit across Pangasinan’s 4th District starting from Dagupan City’s Spanish-era cathedral and 1892 railway terminus, passing through Mangaldan and San Jacinto’s centuries-old parishes and 1899 battlefield, and culminating along the coastal heritage sites of San Fabian.',
                 'stops'          => [
                     'Santuario de San Juan Evangelista',
                     'Old PNR Dagupan/Mayombo (1st) Station',

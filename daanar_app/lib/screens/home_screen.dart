@@ -480,7 +480,7 @@ class _SearchResultRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Explore by place — numbered 2-column ledger
+// Explore by place numbered 2-column ledger
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _PlaceLedger extends StatelessWidget {

@@ -46,7 +46,7 @@ class LandmarkService {
       return {'landmarks': items, 'meta': data['meta'] ?? {}, 'fromCache': false};
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) rethrow;
-      // Network failed — try cache
+      // Network failed try cache
       final cached = await CacheService.loadList(CacheService.keyLandmarks);
       if (cached != null) {
         final items = cached.map(Landmark.fromJson).toList();
@@ -135,7 +135,7 @@ class LandmarkService {
         await _dio.post('/landmarks/$landmarkId/visit', data: payload);
       }
     } catch (_) {
-      // Non-critical — never block UI interaction on analytics network failure
+      // Non-critical never block UI interaction on analytics network failure
     }
   }
 

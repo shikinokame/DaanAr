@@ -126,7 +126,7 @@ class User extends Authenticatable implements FilamentUser
     public static function maskPhone(?string $phone): string
     {
         if (! $phone) {
-            return '—';
+            return ' ';
         }
 
         $normalized = self::normalizePhoneNumber($phone);

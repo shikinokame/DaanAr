@@ -58,7 +58,7 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
         );
         lm = detail.landmark;
       } catch (_) {
-        // Offline with no detail cache yet — still works via bundled landmarkId map!
+        // Offline with no detail cache yet still works via bundled landmarkId map!
       }
     }
 

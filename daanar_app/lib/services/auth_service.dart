@@ -226,7 +226,7 @@ class AuthService {
         await TokenStorage.deleteToken();
         return 'unregistered';
       }
-      // Network timeout / offline — keep local session intact for offline browsing
+      // Network timeout / offline keep local session intact for offline browsing
       return 'offline';
     } catch (_) {
       return 'offline';

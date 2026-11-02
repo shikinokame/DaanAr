@@ -27,7 +27,7 @@ enum TransportMode {
         TransportMode.cycling => Icons.two_wheeler,
       };
 
-  /// Approximate average speed in metres/second — used for live ETA calculation.
+  /// Approximate average speed in metres/second used for live ETA calculation.
   /// ORS returns duration in the initial response; this is for the remaining-distance
   /// update in the live nav panel (distance is straight-line, not along route).
   double get speedMetresPerSec => switch (this) {

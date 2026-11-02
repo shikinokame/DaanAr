@@ -19,7 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
 
         // Note: We use Sanctum token-based auth (Bearer tokens) for the mobile app.
-        // statefulApi() is for cookie/session-based SPAs — do NOT add it here,
+        // statefulApi() is for cookie/session-based SPAs do NOT add it here,
         // as it causes POST requests from mobile clients to 302-redirect.
     })
     ->withExceptions(function (Exceptions $exceptions) {

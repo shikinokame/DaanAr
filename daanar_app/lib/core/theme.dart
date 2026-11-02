@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 /// - [textMuted] ............................... 6.0 : 1
 /// - [brassInk] (small brass text on ivory) .... 5.4 : 1
 /// - [secondary] bright brass ON forest green .. 5.7 : 1
-///   (bright brass is too light for text on ivory — use it for rules,
+///   (bright brass is too light for text on ivory use it for rules,
 ///   borders and text on green surfaces only).
 class AppColors {
   AppColors._();

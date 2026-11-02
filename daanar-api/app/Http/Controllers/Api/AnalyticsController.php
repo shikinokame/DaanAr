@@ -208,7 +208,7 @@ class AnalyticsController extends Controller
                 'todayArViews'        => (int) $todayArViews,
                 'mostVisitedSite'     => ($topSite && ((int) $topSite->total_physical_visits > 0 || (int) $topSite->viewed_in_ar > 0))
                     ? $topSite->name
-                    : '—',
+                    : ' ',
             ],
             'landmarks' => $rows->map(fn ($r) => [
                 'landmarkId'          => $r->id,

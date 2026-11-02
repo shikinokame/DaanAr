@@ -44,7 +44,7 @@ final appRouter = GoRouter(
       ],
     ),
 
-    // Trail detail & live GPS + AR directional navigation — outside shell (full screen)
+    // Trail detail & live GPS + AR directional navigation outside shell (full screen)
     GoRoute(
       path: '/trails/:id',
       builder: (context, state) => TrailDetailScreen(
@@ -58,7 +58,7 @@ final appRouter = GoRouter(
       ),
     ),
 
-    // Landmark detail — outside shell (full screen)
+    // Landmark detail outside shell (full screen)
     GoRoute(
       path: '/landmarks/:id',
       builder: (context, state) => LandmarkDetailScreen(

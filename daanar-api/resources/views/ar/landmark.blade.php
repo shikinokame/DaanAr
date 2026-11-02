@@ -6,7 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#1B4332">
-  <title>{{ $landmark->name }} — 3D & AR Experience</title>
+  <title>{{ $landmark->name }} 3D & AR Experience</title>
 
   <!-- Google Model Viewer (Industry standard 3D & Markerless AR) -->
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
@@ -544,9 +544,9 @@
         if (loadingStatus) loadingStatus.innerText = `Downloading 3D model... (${percent}%)`;
       });
 
-      // 'load' fires when the model is parsed — wait for first rendered frame
+      // 'load' fires when the model is parsed wait for first rendered frame
       viewer.addEventListener('load', () => {
-        console.log('3D Model parsed — waiting for first render frame');
+        console.log('3D Model parsed waiting for first render frame');
         revealModel();
       });
 
@@ -573,7 +573,7 @@
         if (loadingOverlay) loadingOverlay.appendChild(retryBtn);
       });
 
-      // 45-second hard timeout — if model never fires 'load' or 'error', show a friendly message
+      // 45-second hard timeout if model never fires 'load' or 'error', show a friendly message
       setTimeout(() => {
         if (!loadHandled) {
           loadHandled = true;

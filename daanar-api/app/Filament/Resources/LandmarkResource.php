@@ -129,7 +129,7 @@ class LandmarkResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('hero_image')
                     ->label('Image')
-                    ->formatStateUsing(fn (?string $state): string => $state ? '📷 ' . basename($state) : '—')
+                    ->formatStateUsing(fn (?string $state): string => $state ? '📷 ' . basename($state) : ' ')
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()

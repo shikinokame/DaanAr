@@ -126,7 +126,7 @@ class TrailResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('total_distance_metres')
                     ->label('Distance')
-                    ->formatStateUsing(fn (?int $state): string => $state ? number_format($state / 1000, 1) . ' km' : '—')
+                    ->formatStateUsing(fn (?int $state): string => $state ? number_format($state / 1000, 1) . ' km' : ' ')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('landmarks_count')
                     ->counts('landmarks')

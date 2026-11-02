@@ -59,7 +59,7 @@ class NotificationService {
     await _plugin.show(
       id,
       '📍 You arrived at a landmark!',
-      '$landmarkName — $municipality\nTap to explore in AR →',
+      '$landmarkName $municipality\nTap to explore in AR →',
       const NotificationDetails(android: androidDetails),
     );
   }

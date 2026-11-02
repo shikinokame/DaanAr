@@ -40,7 +40,7 @@ class _DaanArAppState extends ConsumerState<DaanArApp> {
       // Start watching position and alerting on landmark proximity
       await GeofenceService.instance.start(ref);
     } catch (_) {
-      // If permission is denied, geofencing simply won't run — app still works
+      // If permission is denied, geofencing simply won't run app still works
     }
   }
 

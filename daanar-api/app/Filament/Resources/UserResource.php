@@ -110,7 +110,7 @@ class UserResource extends Resource
                     ->weight('bold')
                     ->formatStateUsing(function (?string $state, User $record, $livewire): string {
                         if (! $state) {
-                            return $record->email ?: '—';
+                            return $record->email ?: ' ';
                         }
                         $reveal = property_exists($livewire, 'revealPhoneNumbers') && $livewire->revealPhoneNumbers;
 
