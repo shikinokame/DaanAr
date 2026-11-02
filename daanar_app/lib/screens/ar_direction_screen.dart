@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -16,6 +18,96 @@ import '../services/routing_service.dart';
 /// Live Camera AR Directional Wayfinder with 3D Red Extruded Ground Chevrons,
 /// Green Corner Reticles, Top Destination/Distance Card, and Floating Mini-Map.
 class ArDirectionScreen extends ConsumerStatefulWidget {
+  static const MethodChannel _arChannel = MethodChannel('ph.daanar/ar');
+
+  /// Launches the world-anchored ARCore 3D wayfinder (`nav_arrow.glb` + `nav_pin.glb`)
+  /// on ARCore-capable Android devices, automatically falling back to the 2D camera
+  /// [ArDirectionScreen] on non-ARCore devices.
+  static Future<void> open(
+    BuildContext context, {
+    required Landmark targetStop,
+    required int stopNumber,
+    required int totalStops,
+    String? nextInstruction,
+    List<LatLng> segmentPoints = const [],
+    LatLng? userPos,
+    VoidCallback? onMarkArrived,
+  }) async {
+    if (Platform.isAndroid) {
+      try {
+        final supported =
+            await _arChannel.invokeMethod<bool>('isArCoreSupported') ?? false;
+        if (supported) {
+          LatLng? resolvedUser = userPos;
+          if (resolvedUser == null) {
+            try {
+              final pos = await LocationService.getCurrentPosition()
+                  .timeout(const Duration(seconds: 2));
+              resolvedUser = LatLng(pos.latitude, pos.longitude);
+            } catch (_) {}
+          }
+
+          List<LatLng> routePts = segmentPoints;
+          if (routePts.length < 2 && resolvedUser != null) {
+            try {
+              final route = await RoutingService.getRoute(
+                origin: resolvedUser,
+                destination: LatLng(targetStop.lat, targetStop.lng),
+              ).timeout(const Duration(seconds: 3));
+              if (route.points.length >= 2) {
+                routePts = route.points;
+              }
+            } catch (_) {}
+          }
+
+          final flatRoute = <double>[
+            for (final p in routePts) ...[p.latitude, p.longitude],
+          ];
+
+          final outcome = await _arChannel.invokeMethod<String>(
+            'openArWayfinding',
+            <String, dynamic>{
+              'stopName': targetStop.name,
+              'description': targetStop.description,
+              'instruction': nextInstruction ?? '',
+              'stopNumber': stopNumber,
+              'totalStops': totalStops,
+              'targetLat': targetStop.lat,
+              'targetLng': targetStop.lng,
+              if (resolvedUser != null) 'userLat': resolvedUser.latitude,
+              if (resolvedUser != null) 'userLng': resolvedUser.longitude,
+              'route': flatRoute,
+            },
+          );
+
+          if (outcome == 'arrived') {
+            onMarkArrived?.call();
+            return;
+          }
+          if (outcome != 'unsupported') {
+            return;
+          }
+        }
+      } catch (_) {
+        // Fall through to 2D camera chevron fallback
+      }
+    }
+
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArDirectionScreen(
+          targetStop: targetStop,
+          stopNumber: stopNumber,
+          totalStops: totalStops,
+          nextInstruction: nextInstruction,
+          segmentPoints: segmentPoints,
+          onMarkArrived: onMarkArrived,
+        ),
+      ),
+    );
+  }
+
   final Landmark targetStop;
   final int stopNumber;
   final int totalStops;

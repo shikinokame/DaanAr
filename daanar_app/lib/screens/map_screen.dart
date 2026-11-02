@@ -762,19 +762,16 @@ class _LiveNavPanel extends StatelessWidget {
                     ),
                   ),
 
-                // AR Guide button (live camera + 3D red ground chevrons)
+                // AR Guide button (world-anchored ARCore 3D arrows + pin)
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ArDirectionScreen(
-                            targetStop: destination,
-                            stopNumber: 1,
-                            totalStops: 1,
-                            segmentPoints: initialRoute?.points ?? const [],
-                          ),
-                        ),
+                      ArDirectionScreen.open(
+                        context,
+                        targetStop: destination,
+                        stopNumber: 1,
+                        totalStops: 1,
+                        segmentPoints: initialRoute?.points ?? const [],
                       );
                     },
                     icon: const Icon(Icons.explore_rounded, size: 20),

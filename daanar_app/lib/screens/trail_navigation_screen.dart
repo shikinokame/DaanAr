@@ -667,21 +667,19 @@ class _TrailNavigationScreenState
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => ArDirectionScreen(
-                                        targetStop: currentStop,
-                                        stopNumber: currentIdx + 1,
-                                        totalStops: stops.length,
-                                        nextInstruction: nextInstruction,
-                                        segmentPoints: activeRoutePoints,
-                                        onMarkArrived: () => _handleStopArrived(
-                                          trail,
-                                          currentStop,
-                                          currentIdx,
-                                          userPos: _livePos,
-                                        ),
-                                      ),
+                                  ArDirectionScreen.open(
+                                    context,
+                                    targetStop: currentStop,
+                                    stopNumber: currentIdx + 1,
+                                    totalStops: stops.length,
+                                    nextInstruction: nextInstruction,
+                                    segmentPoints: activeRoutePoints,
+                                    userPos: _livePos,
+                                    onMarkArrived: () => _handleStopArrived(
+                                      trail,
+                                      currentStop,
+                                      currentIdx,
+                                      userPos: _livePos,
                                     ),
                                   );
                                 },
