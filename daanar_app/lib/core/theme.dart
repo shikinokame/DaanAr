@@ -13,19 +13,19 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // ── Ink ────────────────────────────────────────────────────────────────────
+  // Ink
   static const Color primary = Color(0xFF1B4332); // deep forest-green ink
   static const Color ink = primary;
   static const Color inkDeep = Color(0xFF12301F); // masthead / dark plates
   static const Color charcoal = Color(0xFF2B2A26); // body copy
   static const Color textMuted = Color(0xFF5E5A50); // captions, meta
 
-  // ── Brass ──────────────────────────────────────────────────────────────────
+  // Brass
   static const Color secondary = Color(0xFFD4A853); // antique brass (on green)
   static const Color brass = secondary;
   static const Color brassInk = Color(0xFF7A5C22); // brass text on ivory
 
-  // ── Paper ──────────────────────────────────────────────────────────────────
+  // Paper
   static const Color background = Color(0xFFF4EEE2); // archival ivory
   static const Color paperDeep = Color(0xFFEBE3D2); // recessed paper
   static const Color surface = Color(0xFFFBF8F1); // mount board / cards

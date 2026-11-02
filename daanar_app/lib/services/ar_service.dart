@@ -30,12 +30,4 @@ class ARService {
     final url = '$base/ar/landmark/$landmarkId';
     return demo ? '$url?demo=1' : url;
   }
-
-  /// URL for the standalone camera+A-Frame test page.
-  static String get testUrl {
-    final base = AppConstants.baseUrl
-        .replaceFirst('/api/v1', '')
-        .replaceFirst(RegExp(r'/$'), '');
-    return '$base/ar/test';
-  }
 }

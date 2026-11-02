@@ -55,7 +55,7 @@ class FeaturedLandmarkCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Mounted print ────────────────────────────────────
+                  // Mounted print
                   AspectRatio(
                     aspectRatio: 4 / 3,
                     child: Container(
@@ -90,7 +90,7 @@ class FeaturedLandmarkCard extends StatelessWidget {
                     ),
                   ),
 
-                  // ── Caption ──────────────────────────────────────────
+                  // Caption
                   Padding(
                     padding: const EdgeInsets.fromLTRB(6, 12, 6, 6),
                     child: Column(

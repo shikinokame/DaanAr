@@ -372,7 +372,7 @@ class _MobileRegistrationScreenState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (!_otpStep) ...[
-                                // ── STEP 1: MOBILE NUMBER INPUT ──────────────
+                                // STEP 1: MOBILE NUMBER INPUT
                                 const Text(
                                   'Philippine Mobile Number',
                                   style: TextStyle(
@@ -445,7 +445,7 @@ class _MobileRegistrationScreenState
                                   ],
                                 ),
                               ] else ...[
-                                // ── STEP 2: 6-DIGIT OTP VERIFICATION ─────────
+                                // STEP 2: 6-DIGIT OTP VERIFICATION
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,

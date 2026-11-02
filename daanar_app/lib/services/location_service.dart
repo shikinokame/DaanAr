@@ -65,7 +65,7 @@ class LocationService {
   }
 }
 
-// ── Exception types ──────────────────────────────────────────────────────────
+// Exception types
 
 enum LocationExceptionType {
   serviceDisabled,

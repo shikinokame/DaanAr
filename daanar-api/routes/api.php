@@ -21,7 +21,7 @@ Route::prefix('admin')->group(function () {
 
 Route::prefix('v1')->group(function () {
 
-    // ── Auth ────────────────────────────────────────────────────────────────
+    // Auth
     Route::prefix('auth')->group(function () {
         Route::post('login', [AuthController::class, 'login']);
         Route::post('send-otp', [AuthController::class, 'sendOtp']);
@@ -32,14 +32,14 @@ Route::prefix('v1')->group(function () {
         Route::middleware('auth:sanctum')->post('logout', [AuthController::class, 'logout']);
     });
 
-    // ── Admin API ───────────────────────────────────────────────────────────
+    // Admin API
     Route::prefix('admin')->group(function () {
         Route::get('reports', [AnalyticsController::class, 'reports']);
         Route::get('users', [AnalyticsController::class, 'users']);
         Route::patch('users/{user}/status', [AnalyticsController::class, 'updateUserStatus']);
     });
 
-    // ── Mobile App Endpoints (enforces real-time block check) ───────────────
+    // Mobile App Endpoints (enforces real-time block check)
     Route::middleware(\App\Http\Middleware\RejectBlockedUser::class)->group(function () {
 
         Route::post('analytics/log-event', [AnalyticsController::class, 'logEvent']);
@@ -128,7 +128,7 @@ Route::prefix('v1')->group(function () {
         Route::get('trails/{trail}',  [TrailController::class, 'show']);
     });
 
-    // ── Internal Media Sync (Protected) ─────────────────────────────────────
+    // Internal Media Sync (Protected)
     Route::prefix('internal')->group(function () {
         Route::post('sync-media', function (\Illuminate\Http\Request $request) {
             $secret = $request->header('X-Sync-Secret');

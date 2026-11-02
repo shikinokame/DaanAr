@@ -10,9 +10,7 @@ import '../core/theme.dart';
 /// Keep decoration subtle: hairline rules, faint paper grain, restrained
 /// sepia. Nothing here should reduce readability or touch-target size.
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Paper
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// Ivory paper background with a very faint, static grain.
 /// Place it *behind* scrolling content (it is cached via RepaintBoundary).
@@ -73,9 +71,7 @@ class _PaperGrainPainter extends CustomPainter {
   bool shouldRepaint(covariant _PaperGrainPainter old) => old.base != base;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Rules, frames & ornaments
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// Double engraved border: an outer hairline plus an inset hairline.
 class EngravedFrame extends StatelessWidget {
@@ -114,7 +110,7 @@ class EngravedFrame extends StatelessWidget {
   }
 }
 
-/// `──── ◆ ────` divider flourish.
+/// ` ◆ ` divider flourish.
 class OrnamentDivider extends StatelessWidget {
   final Color color;
   final double width;
@@ -202,9 +198,7 @@ class _CornerPainter extends CustomPainter {
       old.color != color || old.len != len;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Typography helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// Eyebrow label + serif title, with an optional trailing action.
 class SectionHeader extends StatelessWidget {
@@ -324,9 +318,7 @@ class ArchivalStamp extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Photographs
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// Restrained sepia toning. [amount] 0 = original colour, 1 = full sepia.
 ColorFilter sepiaFilter([double amount = 0.35]) {

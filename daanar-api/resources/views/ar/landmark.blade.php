@@ -53,7 +53,7 @@
       --progress-mask: transparent;
     }
 
-    /* ── Top Bar ── */
+    /* Top Bar */
     .top-bar {
       position: absolute;
       top: env(safe-area-inset-top, 16px);
@@ -114,7 +114,7 @@
       display: block;
     }
 
-    /* ── Floating Side Controls ── */
+    /* Floating Side Controls */
     .controls-stack {
       position: absolute;
       top: 80px;
@@ -151,7 +151,7 @@
       transform: scale(0.92);
     }
 
-    /* ── Touch Interaction Guidance ── */
+    /* Touch Interaction Guidance */
     .interaction-hint {
       position: absolute;
       top: 22%;
@@ -173,7 +173,7 @@
       transition: opacity 0.5s ease;
     }
 
-    /* ── Big AR Launch Button ── */
+    /* Big AR Launch Button */
     #ar-button {
       background: linear-gradient(135deg, #D4A853 0%, #b88d38 100%);
       color: #0b1812;
@@ -201,7 +201,7 @@
       box-shadow: 0 4px 12px rgba(212, 168, 83, 0.3);
     }
 
-    /* ── Dedicated Loading Screen for 3D Assets ── */
+    /* Dedicated Loading Screen for 3D Assets */
     #loading-overlay {
       position: absolute;
       inset: 0;
@@ -266,7 +266,7 @@
       transition: width 0.25s ease;
     }
 
-    /* ── Bottom Information Card ── */
+    /* Bottom Information Card */
     .info-card {
       position: absolute;
       bottom: 16px;
@@ -320,7 +320,7 @@
       overflow-y: auto;
     }
 
-    /* ── No Model State ── */
+    /* No Model State */
     .no-model-box {
       position: absolute;
       top: 50%;
@@ -561,13 +561,13 @@
         showArDiagnostic({status: 'error', message: `3D model error: ${err.detail?.type || 'unknown'}; ${err.detail?.sourceError?.message || 'No further error details supplied.'}`});
         loadHandled = true; // stop the timeout from overwriting the error
         if (loadingStatus) {
-          loadingStatus.innerText = '⚠️ Failed to load 3D model.';
+          loadingStatus.innerText = 'Failed to load 3D model.';
           loadingStatus.style.color = '#ff6b6b';
         }
         if (progressFill) progressFill.style.background = '#ff6b6b';
         // Show a retry button
         const retryBtn = document.createElement('button');
-        retryBtn.innerText = '↺  Retry';
+        retryBtn.innerText = 'Retry';
         retryBtn.style.cssText = 'margin-top:20px;padding:10px 28px;border-radius:24px;border:none;background:#D4A853;color:#0b1812;font-weight:700;font-size:14px;cursor:pointer;';
         retryBtn.onclick = () => location.reload();
         if (loadingOverlay) loadingOverlay.appendChild(retryBtn);
@@ -578,11 +578,11 @@
         if (!loadHandled) {
           loadHandled = true;
           if (loadingStatus) {
-            loadingStatus.innerText = '⚠️ Model is taking too long. The file may be too large or unsupported.';
+            loadingStatus.innerText = 'Model is taking too long. The file may be too large or unsupported.';
             loadingStatus.style.color = '#ffbb55';
           }
           const retryBtn = document.createElement('button');
-          retryBtn.innerText = '↺  Retry';
+          retryBtn.innerText = 'Retry';
           retryBtn.style.cssText = 'margin-top:20px;padding:10px 28px;border-radius:24px;border:none;background:#D4A853;color:#0b1812;font-weight:700;font-size:14px;cursor:pointer;';
           retryBtn.onclick = () => location.reload();
           if (loadingOverlay) loadingOverlay.appendChild(retryBtn);

@@ -453,7 +453,7 @@ class _TrailNavigationScreenState
 
           return Stack(
             children: [
-              // ── Full-screen Google Map ──────────────────────────────────
+              // Full-screen Google Map
               GoogleMap(
                 initialCameraPosition: CameraPosition(
                   target: currentTarget,
@@ -467,7 +467,7 @@ class _TrailNavigationScreenState
                 onMapCreated: (ctrl) => _mapController = ctrl,
               ),
 
-              // ── Top Guidance Banner ─────────────────────────────────────
+              // Top Guidance Banner
               SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
@@ -578,7 +578,7 @@ class _TrailNavigationScreenState
                 ),
               ),
 
-              // ── Bottom Trail Control Sheet ──────────────────────────────
+              // Bottom Trail Control Sheet
               Align(
                 alignment: Alignment.bottomCenter,
                 child: SafeArea(

@@ -60,7 +60,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         body: PaperBackground(
           child: CustomScrollView(
             slivers: [
-              // ── Masthead + search ─────────────────────────────────────
+              // Masthead + search
               SliverToBoxAdapter(
                 child: Column(
                   children: [
@@ -101,7 +101,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               if (_searchQuery.isNotEmpty)
                 SliverToBoxAdapter(child: _buildSearchResults(allAsync))
               else ...[
-                // ── Featured Landmarks ──────────────────────────────────
+                // Featured Landmarks
                 SliverToBoxAdapter(
                   child: SectionHeader(
                     eyebrow: "Curator's Selection",
@@ -142,7 +142,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
 
-                // ── Explore by Place ────────────────────────────────────
+                // Explore by Place
                 const SliverToBoxAdapter(
                   child: SectionHeader(
                     eyebrow: 'Choose your path',
@@ -166,7 +166,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
 
-                // ── Walking routes ──────────────────────────────────────
+                // Walking routes
                 SliverToBoxAdapter(
                   child: trailsAsync.when(
                     loading: () => const Padding(
@@ -181,7 +181,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
 
-                // ── Colophon ────────────────────────────────────────────
+                // Colophon
                 const SliverToBoxAdapter(child: _Colophon()),
               ],
             ],
@@ -243,9 +243,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Masthead
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _Masthead extends StatelessWidget {
   final double topInset;
@@ -339,9 +337,7 @@ class _Masthead extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Search
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _ArchiveSearchField extends StatelessWidget {
   final TextEditingController controller;
@@ -479,9 +475,7 @@ class _SearchResultRow extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Explore by place numbered 2-column ledger
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _PlaceLedger extends StatelessWidget {
   final List<Municipality> municipalities;
@@ -561,9 +555,7 @@ class _PlaceLedger extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Walking routes
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _RoutesSection extends StatelessWidget {
   final List<Trail> trails;
@@ -764,9 +756,7 @@ class _RouteRow extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Small pieces
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _Colophon extends StatelessWidget {
   const _Colophon();

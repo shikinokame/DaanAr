@@ -66,7 +66,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     super.dispose();
   }
 
-  // ── Location (one-shot) ──────────────────────────────────────────────────────
+  // Location (one-shot)
 
   Future<void> _goToMyLocation() async {
     await ref.read(locationProvider.notifier).requestLocation();
@@ -89,7 +89,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
-  // ── Routing ──────────────────────────────────────────────────────────────────
+  // Routing
 
   Future<void> _navigateTo(Landmark destination) async {
     // Ensure GPS fix
@@ -150,7 +150,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
-  // ── Stage 3: live position stream ────────────────────────────────────────────
+  // Stage 3: live position stream
 
   void _startPositionStream(Landmark destination) {
     _positionSubscription?.cancel();
@@ -211,7 +211,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     });
   }
 
-  // ── Stage 4: deviation detection & rerouting ─────────────────────────────────
+  // Stage 4: deviation detection & rerouting
 
   /// Returns the minimum distance (metres) from [point] to any point on the route.
   double _distanceFromRoute(LatLng point, List<LatLng> routePoints) {
@@ -295,7 +295,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {
@@ -334,7 +334,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
       body: Stack(
         children: [
-          // ── Google Map ────────────────────────────────────────────────────
+          // Google Map
           landmarksAsync.when(
             loading: () => const Center(
                 child: CircularProgressIndicator(color: AppColors.primary)),
@@ -405,7 +405,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             },
           ),
 
-          // ── Municipality filter chips (hidden during nav mode) ─────────────
+          // Municipality filter chips (hidden during nav mode)
           if (!_isNavMode)
             Positioned(
               top: 0,
@@ -443,7 +443,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
 
-          // ── Route calculating indicator ───────────────────────────────────
+          // Route calculating indicator
           if (_isCalculatingRoute)
             Positioned(
               top: _isNavMode ? 0 : 62,
@@ -485,7 +485,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
 
-          // ── Static route info panel (non-nav mode) ────────────────────────
+          // Static route info panel (non-nav mode)
           if (_activeRoute != null && !_isNavMode)
             Positioned(
               top: 62,
@@ -498,7 +498,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
 
-          // ── LIVE NAV PANEL (Stage 3) ──────────────────────────────────────
+          // LIVE NAV PANEL (Stage 3)
           if (_isNavMode && _routeDestination != null)
             _LiveNavPanel(
               destination: _routeDestination!,
@@ -518,7 +518,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               onStop: _stopNavigation,
             ),
 
-          // ── Stage 5: AR Proximity Banner ─────────────────────────────────
+          // Stage 5: AR Proximity Banner
           if (_isNavMode && _showArProximityBanner && _routeDestination != null)
             Positioned(
               bottom: 90,
@@ -542,7 +542,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
 
-          // ── FABs (hidden during nav panel has recenter button) ──────────
+          // FABs (hidden during nav panel has recenter button)
           if (!_isNavMode)
             Positioned(
               bottom: _selectedLandmark != null ? 140 : 16,
@@ -562,7 +562,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
 
-          // ── Landmark preview sheet ─────────────────────────────────────────
+          // Landmark preview sheet
           if (_selectedLandmark != null && !_isNavMode)
             Positioned(
               bottom: 0,
@@ -586,7 +586,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // Helpers
 
   Widget _filterChip(String label, bool selected, VoidCallback onTap) {
     return Padding(
@@ -618,7 +618,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       };
 }
 
-// ── Live Navigation Panel (Stage 3) ──────────────────────────────────────────
+// Live Navigation Panel (Stage 3)
 
 class _LiveNavPanel extends StatelessWidget {
   final Landmark destination;
@@ -668,7 +668,7 @@ class _LiveNavPanel extends StatelessWidget {
       bottom: 0,
       child: Stack(
         children: [
-          // ── Top nav bar ────────────────────────────────────────────────────
+          // Top nav bar
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 12,
@@ -743,7 +743,7 @@ class _LiveNavPanel extends StatelessWidget {
             ),
           ),
 
-          // ── Bottom controls ────────────────────────────────────────────────
+          // Bottom controls
           Positioned(
             bottom: 24,
             left: 16,
@@ -825,7 +825,7 @@ class _LiveNavPanel extends StatelessWidget {
   }
 }
 
-// ── Static Route Info Panel ───────────────────────────────────────────────────
+// Static Route Info Panel
 
 class _RouteInfoPanel extends StatelessWidget {
   final RouteResult route;
@@ -892,7 +892,7 @@ class _RouteInfoPanel extends StatelessWidget {
   }
 }
 
-// ── Landmark Preview Sheet ────────────────────────────────────────────────────
+// Landmark Preview Sheet
 
 class _LandmarkPreviewSheet extends StatelessWidget {
   final Landmark landmark;
@@ -1002,7 +1002,7 @@ class _LandmarkPreviewSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            // ── Transport mode selector ─────────────────────────────────────
+            // Transport mode selector
             if (!isNavigating)
               Row(
                 children: TransportMode.values.map((m) {
@@ -1111,7 +1111,7 @@ class _LandmarkPreviewSheet extends StatelessWidget {
   }
 }
 
-// ── AR Proximity Banner (Stage 5) ─────────────────────────────────────────────
+// AR Proximity Banner (Stage 5)
 
 class _ArProximityBanner extends StatelessWidget {
   final Landmark destination;

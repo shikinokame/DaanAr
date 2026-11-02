@@ -37,12 +37,12 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        /* ── Custom Scrollbar ───────────────────────────── */
+        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg-obsidian); }
         ::-webkit-scrollbar-thumb { background: var(--brass); border-radius: 2px; }
 
-        /* ── Typography Utilities ───────────────────────── */
+        /* Typography Utilities */
         .font-serif { font-family: 'Cormorant Garamond', Georgia, serif; }
         .font-mono  { font-family: 'JetBrains Mono', monospace; }
 
@@ -52,7 +52,7 @@
             padding: 0 32px;
         }
 
-        /* ── HUD Corner Reticles ────────────────────────── */
+        /* HUD Corner Reticles */
         .hud-frame { position: relative; }
         .hud-frame::before,
         .hud-frame::after {
@@ -74,7 +74,7 @@
             border-right: 1.5px solid var(--brass);
         }
 
-        /* ── Navbar ─────────────────────────────────────── */
+        /* Navbar */
         nav {
             position: fixed;
             top: 0; left: 0; right: 0;
@@ -155,7 +155,7 @@
             background: rgba(212, 160, 86, 0.06);
         }
 
-        /* ── Hero (Asymmetric Split) ────────────────────── */
+        /* Hero (Asymmetric Split) */
         .hero {
             padding: 148px 0 96px;
             border-bottom: 1px solid var(--border-subtle);
@@ -275,7 +275,7 @@
             margin-top: 2px;
         }
 
-        /* ── Hero AR Viewport Card (Interactive) ────────── */
+        /* Hero AR Viewport Card (Interactive) */
         .ar-viewport {
             display: block;
             text-decoration: none;
@@ -417,7 +417,7 @@
             gap: 4px;
         }
 
-        /* ── Section Shared Headers ─────────────────────── */
+        /* Section Shared Headers */
         section {
             padding: 96px 0;
             border-bottom: 1px solid var(--border-subtle);
@@ -444,7 +444,7 @@
             margin-top: 12px;
         }
 
-        /* ── 01 / Capabilities (Architectural Hairline Grid) ─ */
+        /* 01 / Capabilities (Architectural Hairline Grid) */
         .capabilities-layout {
             display: grid;
             grid-template-columns: 0.38fr 0.62fr;
@@ -491,7 +491,7 @@
             line-height: 1.65;
         }
 
-        /* ── 02 / Featured Landmarks (Balanced Editorial Bento) ── */
+        /* 02 / Featured Landmarks (Balanced Editorial Bento) */
         .section-top-bar {
             display: flex;
             align-items: flex-end;
@@ -627,7 +627,7 @@
         }
         .ar-launch-link:hover { color: var(--brass); }
 
-        /* ── 03 / Municipalities Index Strip ────────────── */
+        /* 03 / Municipalities Index Strip */
         .muni-directory {
             border-top: 1px solid var(--border-subtle);
             margin-top: 40px;
@@ -673,7 +673,7 @@
             border-radius: 3px;
         }
 
-        /* ── 04 / Download Field Box ────────────────────── */
+        /* 04 / Download Field Box */
         .cta-banner {
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
@@ -695,7 +695,7 @@
             letter-spacing: 0.08em;
         }
 
-        /* ── Footer ─────────────────────────────────────── */
+        /* Footer */
         footer {
             padding: 40px 0;
             font-family: 'JetBrains Mono', monospace;
@@ -728,7 +728,7 @@
             color: var(--text-muted);
         }
 
-        /* ── Responsive Breakpoints ─────────────────────── */
+        /* Responsive Breakpoints */
         @media (max-width: 992px) {
             .hero-grid,
             .capabilities-layout {
@@ -765,7 +765,7 @@
 </head>
 <body>
 
-    <!-- ── Navbar ─────────────────────────────────── -->
+    <!-- Navbar -->
     <nav>
         <div class="nav-inner">
             <a href="/" class="nav-logo">
@@ -795,7 +795,7 @@
         </div>
     </nav>
 
-    <!-- ── Hero ──────────────────────────────────── -->
+    <!-- Hero -->
     @php
         $heroLandmark = $featured->first();
         $heroArUrl = $heroLandmark ? route('ar.landmark', $heroLandmark->id) : '#landmarks';
@@ -896,7 +896,7 @@
         </div>
     </section>
 
-    <!-- ── 01 / Capabilities ─────────────────────── -->
+    <!-- 01 / Capabilities -->
     <section id="features">
         <div class="container capabilities-layout">
             <div>
@@ -981,7 +981,7 @@
         </div>
     </section>
 
-    <!-- ── 02 / Featured Landmarks ───────────────── -->
+    <!-- 02 / Featured Landmarks -->
     <section id="landmarks">
         <div class="container">
             <div class="section-top-bar">
@@ -1064,7 +1064,7 @@
         </div>
     </section>
 
-    <!-- ── 03 / Municipalities Directory ─────────── -->
+    <!-- 03 / Municipalities Directory -->
     <section id="municipalities">
         <div class="container">
             <div>
@@ -1090,7 +1090,7 @@
         </div>
     </section>
 
-    <!-- ── 04 / Download Field App CTA ───────────── -->
+    <!-- 04 / Download Field App CTA -->
     <section id="download" style="border-bottom: none;">
         <div class="container">
             <div class="cta-banner hud-frame">
@@ -1115,7 +1115,7 @@
         </div>
     </section>
 
-    <!-- ── Footer ────────────────────────────────── -->
+    <!-- Footer -->
     <footer>
         <div class="container footer-inner">
             <div>DaanAR &nbsp;·&nbsp; Pangasinan Cultural Heritage Navigation</div>

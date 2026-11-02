@@ -301,9 +301,9 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             )
         }
 
-        // 4A. "View in your Space (AR)" Launch Button (shown in 3D Studio Mode)
+        // "View in your Space (AR)" Launch Button (shown in 3D Studio Mode)
         launchArButton = Button(this).apply {
-            text = "✨  View in your Space (AR)"
+            text = "View in your Space (AR)"
             isAllCaps = false
             setTextColor(Color.parseColor("#0B1812"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
@@ -470,7 +470,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         }
 
         val placeCenterBtn = Button(this).apply {
-            text = "🎯 Recenter Here"
+            text = "Recenter Here"
             isAllCaps = false
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
@@ -621,7 +621,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                 }
 
                 if (resolved == null) {
-                    loadingStatusText.text = "⚠️ 3D model unavailable offline. Connect once to sync."
+                    loadingStatusText.text = "3D model unavailable offline. Connect once to sync."
                     return@launch
                 }
 
@@ -632,7 +632,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
                 loadingOverlay.visibility = View.GONE
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading 3D model", e)
-                loadingStatusText.text = "⚠️ Failed to load 3D model: ${e.localizedMessage}"
+                loadingStatusText.text = "Failed to load 3D model: ${e.localizedMessage}"
             }
         }
     }
@@ -877,18 +877,12 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             planeRenderer.isEnabled = true
             planeRenderer.isVisible = true
 
-            // CRITICAL FIX: By default, ARSceneView creates an empty AR Environment with
-            // `indirectLight = null` (expecting ARCore LightEstimator to fill it).
-            // By loading `SceneView.createEnvironment(environmentLoader, isOpaque = false)`,
-            // ARSceneView receives the exact same `"environments/neutral/neutral_ibl.ktx"`
-            // studio image-based lighting as the 3D Studio Preview while keeping a transparent
-            // skybox for the AR camera feed!
+            // Use neutral studio IBL with transparent skybox for camera passthrough
             lightEstimator = null
             environment = SceneView.createEnvironment(environmentLoader, isOpaque = false)
             indirectLight?.intensity = 26_000f
             mainLightNode?.intensity = 65_000f
 
-            // Configure ARCore Session with Instant Placement (LOCAL_Y_UP)
             configureSession { session, config ->
                 config.instantPlacementMode = Config.InstantPlacementMode.LOCAL_Y_UP
                 config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
@@ -901,19 +895,17 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             }
 
             onSessionUpdated = { _, frame ->
-                // Ensure the neutral studio IBL environment and balanced intensity remain active
                 if (indirectLight == null) {
                     environment = SceneView.createEnvironment(environmentLoader, isOpaque = false)
                 }
                 indirectLight?.intensity = 26_000f
                 mainLightNode?.intensity = 65_000f
 
-                // Align the main directional light with the user's camera viewing direction
-                // so the front of the 3D landmark facing the user is always evenly lit!
+                // Keep directional light aligned with camera forward vector
                 val zAxis = frame.camera.pose.zAxis
                 mainLightNode?.lightDirection = Float3(-zAxis[0], -zAxis[1] - 0.35f, -zAxis[2])
 
-                // Automatically place the landmark ~2.0m in front of the user as soon as ARCore tracks
+                // Auto-place model once tracking starts
                 if (!autoPlacedInAr && frame.camera.trackingState == TrackingState.TRACKING) {
                     val placed = placeOrMoveModelAtScreenPoint(
                         frame = frame,
@@ -1071,10 +1063,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         rotateSeekBar.progress = (arRotationYawDeg.toInt() + 180).coerceIn(0, 360)
     }
 
-    /**
-     * Moves or creates the ARCore anchor at screen coordinate `(px, py)` WITHOUT destroying/recreating
-     * the `ModelNode` if it already exists making floor dragging fast and lag-free!
-     */
+    // Moves or creates the ARCore anchor at (px, py) while reusing the loaded ModelNode
     private fun placeOrMoveModelAtScreenPoint(
         frame: Frame,
         px: Float,
@@ -1084,7 +1073,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         val arView = arSceneView ?: return false
         val bytes = cachedModelBytes ?: return false
 
-        // 1. Prefer horizontal plane hit if detected, otherwise InstantPlacementPoint (2.0m)
+        // Prefer horizontal plane hit if detected, otherwise InstantPlacementPoint (2.0m)
         val planeHit: HitResult? = frame.hitTest(px, py).firstOrNull { hit ->
             val trackable = hit.trackable
             (trackable is Plane && trackable.isPoseInPolygon(hit.hitPose) &&
@@ -1108,7 +1097,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         val existingAnchorNode = arAnchorNode
         val existingModelNode = arModelNode
 
-        // Fast path: if the model is already loaded, simply swap the Anchor on the existing AnchorNode!
+        // Swap anchor on existing node if already loaded
         if (!forceNewAnchor && existingAnchorNode != null && existingModelNode != null) {
             try {
                 val oldAnchor = existingAnchorNode.anchor

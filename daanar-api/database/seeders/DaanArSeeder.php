@@ -72,7 +72,7 @@ class DaanArSeeder extends Seeder
         );
 
         $landmarks = [
-            // ── Dagupan City ───────────────────────────────────────────────
+            // Dagupan City
             [
                 'municipality' => 'Dagupan City',
                 'name' => 'Old PNR Dagupan/Mayombo (1st) Station',
@@ -102,7 +102,7 @@ class DaanArSeeder extends Seeder
                 'is_featured' => true,
             ],
 
-            // ── Manaoag ────────────────────────────────────────────────────
+            // Manaoag
             [
                 'municipality' => 'Manaoag',
                 'name' => 'Minor Basilica of Our Lady of the Rosary of Manaoag',
@@ -134,7 +134,7 @@ class DaanArSeeder extends Seeder
             [
                 'municipality' => 'Manaoag',
                 'name' => 'Historic Town Plaza and Street Grid',
-                'description' => 'Centered around the Minor Basilica of Our Lady of the Rosary, the Historic Town Plaza and Street Grid represents the cultural, spiritual, and civic core of Manaoag, Pangasinan. The radial street system branches directly out from the central church square to facilitate pilgrimage processions, showcasing a legacy of early Spanish urban planning that survived through subsequent historical eras.',
+                'description' => 'Centered around the Minor Basilica of Our Lady of the Rosary, the Historic Town Plaza and Street Grid forms the civic and religious center of Manaoag, Pangasinan. The radial street layout extends from the central church square to support pilgrimage processions, preserving its early Spanish urban plan.',
                 'short_description' => 'The physical layout and historical heart of Manaoag, established during the Spanish colonial period and evolving through the Philippine-American War era.',
                 'category' => 'park',
                 'era' => 'Philippine-American War',
@@ -146,7 +146,7 @@ class DaanArSeeder extends Seeder
                 'is_featured' => false,
             ],
 
-            // ── Mangaldan ──────────────────────────────────────────────────
+            // Mangaldan
             [
                 'municipality' => 'Mangaldan',
                 'name' => 'Saint Thomas Aquinas Parish Church',
@@ -164,7 +164,7 @@ class DaanArSeeder extends Seeder
             [
                 'municipality' => 'Mangaldan',
                 'name' => 'PNR Mangaldan Station',
-                'description' => 'The PNR Mangaldan Station was an integral station on the Manila Railroad Company’s northern line extension extending from Dagupan toward San Fabian and La Union. During the early 20th century, the station spurred Mangaldan’s agricultural commerce particularly carabao livestock and processed meat trading into a thriving regional enterprise.',
+                'description' => 'The PNR Mangaldan Station was a key stop on the Manila Railroad Company’s northern line extension from Dagupan toward San Fabian and La Union. During the early 20th century, the station supported Mangaldan’s agricultural trade, especially carabao livestock and processed meat products.',
                 'short_description' => 'Historic railroad station on the Northern Luzon line extension.',
                 'category' => 'historical',
                 'era' => 'American Colonial',
@@ -176,7 +176,7 @@ class DaanArSeeder extends Seeder
                 'is_featured' => false,
             ],
 
-            // ── San Jacinto ────────────────────────────────────────────────
+            // San Jacinto
             [
                 'municipality' => 'San Jacinto',
                 'name' => 'Battle of San Jacinto Monument',
@@ -206,7 +206,7 @@ class DaanArSeeder extends Seeder
                 'is_featured' => true,
             ],
 
-            // ── San Fabian ─────────────────────────────────────────────────
+            // San Fabian
             [
                 'municipality' => 'San Fabian',
                 'name' => 'Parish of St. Fabian, Pope and Martyr',
@@ -264,7 +264,7 @@ class DaanArSeeder extends Seeder
             $landmarkModels->put($lm->name, $lm);
         }
 
-        // ── Seed District 4 Heritage Trail + Town Sub-Trails ─────────────────
+        // Seed District 4 Heritage Trail + Town Sub-Trails
         $trailsData = [
             [
                 'name'           => 'District 4 Heritage Trail',
@@ -272,7 +272,7 @@ class DaanArSeeder extends Seeder
                 'district'       => 'District 4 (Dagupan • Mangaldan • San Jacinto • San Fabian)',
                 'difficulty'     => 'moderate',
                 'estimated_time' => 95,
-                'description'    => 'Flagship multi-town heritage circuit across Pangasinan’s 4th District starting from Dagupan City’s Spanish-era cathedral and 1892 railway terminus, passing through Mangaldan and San Jacinto’s centuries-old parishes and 1899 battlefield, and culminating along the coastal heritage sites of San Fabian.',
+                'description'    => 'Multi-town heritage route across Pangasinan’s 4th District starting from Dagupan City’s Spanish-era cathedral and 1892 railway station, passing through Mangaldan and San Jacinto’s historic parishes and 1899 battlefield, and ending at the coastal landmarks of San Fabian.',
                 'stops'          => [
                     'Santuario de San Juan Evangelista',
                     'Old PNR Dagupan/Mayombo (1st) Station',

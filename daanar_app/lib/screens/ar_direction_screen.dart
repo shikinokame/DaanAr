@@ -251,7 +251,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── 1. Full-Screen Live Rear Camera Feed ──────────────────────────
+          // 1. Full-Screen Live Rear Camera Feed
           _buildCameraLayer(),
 
           // Subtle bottom vignette so ground chevrons pop clearly on bright pavement
@@ -273,7 +273,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
             ),
           ),
 
-          // ── 2. 3D Red Extruded Ground Chevrons on the Walkway ─────────────
+          // 2. 3D Red Extruded Ground Chevrons on the Walkway
           Positioned.fill(
             child: IgnorePointer(
               child: AnimatedBuilder(
@@ -290,7 +290,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
             ),
           ),
 
-          // ── 3. Neon Green Scanner Corner Brackets (⌜ ⌝ / ⌞ ⌟) ─────────────
+          // 3. Neon Green Scanner Corner Brackets (⌜ ⌝ / ⌞ ⌟)
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 56, 18, 22),
@@ -303,7 +303,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
             ),
           ),
 
-          // ── 4. Top Navigation Controls + Frosted Destination/Distance Card ─
+          // 4. Top Navigation Controls + Frosted Destination/Distance Card
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -476,7 +476,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
             ),
           ),
 
-          // ── 5. Floating Right-Side Mini-Map (matches screenshot) ──────────
+          // 5. Floating Right-Side Mini-Map (matches screenshot)
           Positioned(
             top: MediaQuery.of(context).padding.top + 185,
             right: 18,

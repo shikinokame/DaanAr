@@ -37,7 +37,7 @@ class LandmarkCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Mounted archival photograph ──────────────────────────────
+              // Mounted archival photograph
               SizedBox(
                 height: 118,
                 width: double.infinity,
@@ -73,7 +73,7 @@ class LandmarkCard extends StatelessWidget {
                 ),
               ),
 
-              // ── Archival folio caption ───────────────────────────────────
+              // Archival folio caption
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(4, 8, 4, 2),

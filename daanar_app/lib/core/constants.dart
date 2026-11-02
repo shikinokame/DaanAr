@@ -4,7 +4,7 @@
 class AppConstants {
   AppConstants._();
 
-  // ── API Base URL ─────────────────────────────────────────────────────────
+  // API Base URL
   // DEVELOPMENT: Use ngrok or your local IP.
   // PRODUCTION:  Change to your Railway domain before running `flutter build apk --release`
   //
@@ -35,7 +35,7 @@ class AppConstants {
     'cultural',
   ];
 
-  // ── OpenRouteService (Routing) ───────────────────────────────────────────
+  // OpenRouteService (Routing)
   // Sign up free at: https://openrouteservice.org/dev/#/signup
   // Paste your key below (free tier: 2,000 requests/day, no credit card)
   static const String orsApiKey = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjI1YjMyNTA2MWI1NTRiMjE5MTAwZTU3ZDU4MmE4NDA1IiwiaCI6Im11cm11cjY0In0=';

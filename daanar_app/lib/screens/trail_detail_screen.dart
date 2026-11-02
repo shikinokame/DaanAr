@@ -182,7 +182,7 @@ class _TrailDetailScreenState extends ConsumerState<TrailDetailScreen> {
                   child: ListView(
                     padding: EdgeInsets.zero,
                     children: [
-                      // ── Map Preview Plate ──────────────────────────────────
+                      // Map Preview Plate
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                         child: EngravedFrame(
@@ -222,7 +222,7 @@ class _TrailDetailScreenState extends ConsumerState<TrailDetailScreen> {
                         ),
                       ),
 
-                      // ── Trail Header & Key Metrics ─────────────────────────
+                      // Trail Header & Key Metrics
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                         child: EngravedFrame(
@@ -284,7 +284,7 @@ class _TrailDetailScreenState extends ConsumerState<TrailDetailScreen> {
                         ),
                       ),
 
-                      // ── Ordered Stops Timeline ─────────────────────────────
+                      // Ordered Stops Timeline
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
                         child: Row(
@@ -352,7 +352,7 @@ class _TrailDetailScreenState extends ConsumerState<TrailDetailScreen> {
                   ),
                 ),
 
-                // ── Sticky Start / Resume Trail CTA ──────────────────────────
+                // Sticky Start / Resume Trail CTA
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                   decoration: const BoxDecoration(

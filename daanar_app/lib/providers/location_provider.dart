@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/location_service.dart';
 
-// ── State ────────────────────────────────────────────────────────────────────
+// State
 
 /// All possible states the location system can be in.
 sealed class LocationState {}
@@ -22,7 +22,7 @@ class LocationError extends LocationState {
   LocationError(this.message, this.type);
 }
 
-// ── Notifier ─────────────────────────────────────────────────────────────────
+// Notifier
 
 class LocationNotifier extends Notifier<LocationState> {
   @override
@@ -50,7 +50,7 @@ class LocationNotifier extends Notifier<LocationState> {
   }
 }
 
-// ── Provider ─────────────────────────────────────────────────────────────────
+// Provider
 
 final locationProvider = NotifierProvider<LocationNotifier, LocationState>(
   LocationNotifier.new,

@@ -171,7 +171,7 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ── Mounted Archival Plate ───────────────────────────
+                        // Mounted Archival Plate
                         Container(
                           decoration: BoxDecoration(
                             color: AppColors.surface,
@@ -255,7 +255,7 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
 
                         const SizedBox(height: 22),
 
-                        // ── Editorial Title Header ───────────────────────────
+                        // Editorial Title Header
                         Text(
                           (landmark.municipality?.name ?? 'Pangasinan Heritage').toUpperCase(),
                           style: AppText.eyebrow,
@@ -275,14 +275,14 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
                         const OrnamentDivider(color: AppColors.brassInk, width: 120),
                         const SizedBox(height: 20),
 
-                        // ── Primary 3D & AR Launch Plate ─────────────────────
+                        // Primary 3D & AR Launch Plate
                         _ArLaunchPlate(
                           onPressed: () => _openArExperience(context, landmark),
                         ),
 
                         const SizedBox(height: 24),
 
-                        // ── Historical Narrative ─────────────────────────────
+                        // Historical Narrative
                         Text('ARCHIVAL RECORD', style: AppText.eyebrow),
                         const SizedBox(height: 4),
                         Text('Historical Background', style: AppText.sectionTitle.copyWith(fontSize: 24)),
@@ -307,7 +307,7 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
 
                         const SizedBox(height: 24),
 
-                        // ── Registry & Cartographic Ledger ───────────────────
+                        // Registry & Cartographic Ledger
                         Text('CATALOGUE DATA', style: AppText.eyebrow),
                         const SizedBox(height: 4),
                         Text('Site Registry', style: AppText.sectionTitle.copyWith(fontSize: 24)),

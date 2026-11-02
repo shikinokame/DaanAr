@@ -71,7 +71,7 @@ class CacheService {
     }
   }
 
-  // ── Cache keys ────────────────────────────────────────────────────────────
+  // Cache keys
   static const String keyLandmarks         = 'landmarks';
   static const String keyFeaturedLandmarks = 'landmarks_featured';
   static const String keyMunicipalities    = 'municipalities';

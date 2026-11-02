@@ -90,7 +90,7 @@ class TrailsScreen extends ConsumerWidget {
                 },
                 child: CustomScrollView(
                   slivers: [
-                    // ── Curated Heritage Trails ─────────────────────────────
+                    // Curated Heritage Trails
                     SliverToBoxAdapter(
                       child: trailsAsync.when(
                         loading: () => const SizedBox.shrink(),
@@ -226,7 +226,7 @@ class TrailsScreen extends ConsumerWidget {
                       ),
                     ),
 
-                    // ── Municipality Filter Ledger ───────────────────────────
+                    // Municipality Filter Ledger
                     SliverToBoxAdapter(
                       child: municipalitiesAsync.when(
                         loading: () => const SizedBox(height: 52),
@@ -278,7 +278,7 @@ class TrailsScreen extends ConsumerWidget {
                       ),
                     ),
 
-                    // ── Category Filter Ledger ──────────────────────────────
+                    // Category Filter Ledger
                     SliverToBoxAdapter(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,7 +325,7 @@ class TrailsScreen extends ConsumerWidget {
                       ),
                     ),
 
-                    // ── Landmark Catalog Grid ───────────────────────────────
+                    // Landmark Catalog Grid
                     landmarksAsync.when(
                       loading: () =>
                           const SliverFillRemaining(child: ShimmerList(count: 6)),

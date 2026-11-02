@@ -127,7 +127,7 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 
-# ── App Icon Configuration ───────────────────────────────────────────
+# App Icon Configuration
 flutter_launcher_icons:
   android: true
   ios: false
@@ -138,7 +138,7 @@ flutter_launcher_icons:
   web:
     generate: false
 
-# ── Splash Screen Configuration ──────────────────────────────────────
+# Splash Screen Configuration
 flutter_native_splash:
   color: "#0b0f19"
   image: assets/images/logo.png
