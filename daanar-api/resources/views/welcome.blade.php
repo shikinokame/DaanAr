@@ -1121,7 +1121,6 @@
             <div>DaanAR &nbsp;·&nbsp; Pangasinan Cultural Heritage Navigation</div>
             <div class="footer-links">
                 <span>© {{ date('Y') }} DaanAR</span>
-                <a href="{{ route('ar.test') }}">AR Camera Test</a>
                 <a href="/admin">Admin Portal</a>
             </div>
         </div>
