@@ -257,3 +257,4 @@ class LocationHelperController extends Controller
         ];
     }
 }
+
