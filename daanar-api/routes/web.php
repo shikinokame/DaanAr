@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\LocationHelperController;
 use App\Http\Controllers\ArController;
 use App\Http\Controllers\LandingController;
 use Illuminate\Support\Facades\Route;
@@ -21,3 +22,10 @@ Route::get('/storage/ar-models/{version}/{filename}', function (string $version,
         'Cache-Control' => 'public, max-age=86400',
     ]);
 })->where('filename', '.*\.glb');
+
+// Authenticated CMS helpers for interactive map pin picking and URL parsing
+Route::prefix('cms-tools/location')->group(function () {
+    Route::get('/search', [LocationHelperController::class, 'search'])->name('cms.location.search');
+    Route::get('/reverse', [LocationHelperController::class, 'reverse'])->name('cms.location.reverse');
+    Route::get('/resolve-url', [LocationHelperController::class, 'resolveUrl'])->name('cms.location.resolve-url');
+});

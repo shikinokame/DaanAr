@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\LandmarkResource\Pages;
 use App\Models\Landmark;
+use App\Models\Municipality;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -25,6 +26,16 @@ class LandmarkResource extends Resource
     public static function form(Form $form): Form
     {
         $user = Auth::user();
+
+        $municipalitiesMap = [];
+        try {
+            $municipalitiesMap = Municipality::query()
+                ->get(['id', 'name', 'lat', 'lng'])
+                ->keyBy('id')
+                ->toArray();
+        } catch (\Throwable) {
+            $municipalitiesMap = [];
+        }
 
         return $form
             ->schema([
@@ -73,17 +84,32 @@ class LandmarkResource extends Resource
                     ->columns(2),
 
                 Forms\Components\Section::make('Location')
+                    ->description('Paste a Google Maps link or coordinates, search for the place name, or click directly on the map to pin the landmark.')
                     ->schema([
+                        Forms\Components\View::make('filament.forms.location-map-picker')
+                            ->viewData([
+                                'municipalities' => $municipalitiesMap,
+                                'showGeofence' => true,
+                                'hasMunicipality' => true,
+                                'hasAddress' => true,
+                            ])
+                            ->columnSpanFull(),
                         Forms\Components\TextInput::make('lat')
                             ->label('Latitude')
                             ->required()
                             ->numeric()
-                            ->step(0.00000001),
+                            ->minValue(-90)
+                            ->maxValue(90)
+                            ->step(0.00000001)
+                            ->placeholder('e.g. 16.04421500'),
                         Forms\Components\TextInput::make('lng')
                             ->label('Longitude')
                             ->required()
                             ->numeric()
-                            ->step(0.00000001),
+                            ->minValue(-180)
+                            ->maxValue(180)
+                            ->step(0.00000001)
+                            ->placeholder('e.g. 120.48610200'),
                     ])
                     ->columns(2),
 

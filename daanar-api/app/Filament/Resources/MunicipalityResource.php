@@ -33,6 +33,14 @@ class MunicipalityResource extends Resource
                             ->required()
                             ->default('Pangasinan')
                             ->maxLength(255),
+                        Forms\Components\View::make('filament.forms.location-map-picker')
+                            ->viewData([
+                                'municipalities' => [],
+                                'showGeofence' => false,
+                                'hasMunicipality' => false,
+                                'hasAddress' => false,
+                            ])
+                            ->columnSpanFull(),
                         Forms\Components\TextInput::make('lat')
                             ->label('Latitude')
                             ->required()
