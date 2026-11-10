@@ -75,7 +75,7 @@ class TrailResource extends Resource
                     ->columns(2),
 
                 Forms\Components\Section::make('Landmarks on Trail')
-                    ->description('Select landmarks across one or more municipalities and drag to set the visit order.')
+                    ->description('Select landmarks across one or more municipalities in the order they should be visited.')
                     ->schema([
                         Forms\Components\Select::make('landmarks')
                             ->relationship(
@@ -83,14 +83,23 @@ class TrailResource extends Resource
                                 titleAttribute: 'name',
                                 modifyQueryUsing: fn (Builder $query, Get $get) => $query->when(
                                     $get('municipality_id'),
-                                    fn (Builder $query, int $municipalityId) => $query->where('municipality_id', $municipalityId),
+                                    fn (Builder $query, $municipalityId) => $query->where('municipality_id', (int) $municipalityId),
                                 ),
                             )
                             ->multiple()
                             ->searchable()
                             ->preload()
-                            ->reorderable()
-                            ->orderColumn('order')
+                            ->saveRelationshipsUsing(function (Trail $record, ?array $state): void {
+                                $syncData = [];
+                                $index = 1;
+                                foreach ($state ?? [] as $landmarkId) {
+                                    $syncData[(int) $landmarkId] = ['order' => $index++];
+                                }
+                                $record->landmarks()->detach();
+                                if (! empty($syncData)) {
+                                    $record->landmarks()->attach($syncData);
+                                }
+                            })
                             ->columnSpanFull()
                             ->helperText('Leave Municipality blank above to combine landmarks from multiple towns (e.g. District 4 Heritage Trail).'),
                     ]),
