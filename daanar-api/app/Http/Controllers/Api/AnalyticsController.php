@@ -276,5 +276,77 @@ class AnalyticsController extends Controller
             ],
         ]);
     }
+
+    /**
+     * GET /api/v1/history
+     * Returns the authenticated user's visit and AR viewing history.
+     */
+    public function userHistory(Request $request): JsonResponse
+    {
+        $user = $request->user('sanctum');
+        if (! $user && $request->hasHeader('X-User-Phone')) {
+            $normalizedPhone = User::normalizePhoneNumber((string) $request->header('X-User-Phone'));
+            $user = User::where('phone_number', $normalizedPhone)->first();
+        }
+        if (! $user && $request->filled('userId')) {
+            $user = User::find((int) $request->query('userId'));
+        }
+
+        if (! $user) {
+            return response()->json(['data' => []]);
+        }
+
+        $entries = LandmarkVisit::with('landmark.municipality')
+            ->where('user_id', $user->id)
+            ->whereIn('action_type', [
+                LandmarkVisit::ACTION_PHYSICAL_VISIT,
+                LandmarkVisit::ACTION_AR_VIEW,
+            ])
+            ->orderByDesc('visited_at')
+            ->limit(100)
+            ->get()
+            ->map(function (LandmarkVisit $visit) {
+                $lm = $visit->landmark;
+                $isAr = $visit->action_type === LandmarkVisit::ACTION_AR_VIEW;
+
+                return [
+                    'id'                => 'srv_' . $visit->id,
+                    'landmark_id'       => $visit->landmark_id,
+                    'landmark_name'     => $lm?->name ?? 'Heritage Landmark',
+                    'municipality_name' => $lm?->municipality?->name ?? 'Pangasinan',
+                    'hero_image_url'    => $lm?->hero_image_url,
+                    'category'          => $lm?->category ?? 'historical',
+                    'type'              => $isAr ? 'ar' : 'visit',
+                    'subtitle'          => $isAr
+                        ? '3D & AR model inspection'
+                        : 'On-site visit · Verified GPS',
+                    'timestamp'         => ($visit->visited_at ?? $visit->created_at)?->toIso8601String(),
+                ];
+            });
+
+        return response()->json(['data' => $entries]);
+    }
+
+    /**
+     * DELETE /api/v1/history
+     * Clears the authenticated user's visit and AR viewing history.
+     */
+    public function clearUserHistory(Request $request): JsonResponse
+    {
+        $user = $request->user('sanctum');
+        if (! $user && $request->hasHeader('X-User-Phone')) {
+            $normalizedPhone = User::normalizePhoneNumber((string) $request->header('X-User-Phone'));
+            $user = User::where('phone_number', $normalizedPhone)->first();
+        }
+        if (! $user && $request->filled('userId')) {
+            $user = User::find((int) $request->input('userId'));
+        }
+
+        if ($user) {
+            LandmarkVisit::where('user_id', $user->id)->delete();
+        }
+
+        return response()->json(['status' => 'cleared']);
+    }
 }
 

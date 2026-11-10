@@ -44,6 +44,10 @@ Route::prefix('v1')->group(function () {
 
         Route::post('analytics/log-event', [AnalyticsController::class, 'logEvent']);
 
+        // User Visit & AR Viewing History endpoints
+        Route::get('history', [AnalyticsController::class, 'userHistory']);
+        Route::delete('history', [AnalyticsController::class, 'clearUserHistory']);
+
         // Landmarks featured must be declared before {landmark} to avoid route clash
         Route::prefix('landmarks')->group(function () {
             Route::get('featured', [LandmarkController::class, 'featured']);
