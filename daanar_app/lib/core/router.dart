@@ -5,6 +5,7 @@ import '../screens/shell_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/trails_screen.dart';
 import '../screens/map_screen.dart';
+import '../screens/history_screen.dart';
 import '../screens/landmark_detail_screen.dart';
 import '../screens/trail_detail_screen.dart';
 import '../screens/trail_navigation_screen.dart';
@@ -25,7 +26,7 @@ final appRouter = GoRouter(
       ),
     ),
 
-    // Shell with bottom nav (Home | Trails | Map)
+    // Shell with bottom nav (Home | Explore | Map | History)
     ShellRoute(
       builder: (context, state, child) => ShellScreen(child: child),
       routes: [
@@ -40,6 +41,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/map',
           builder: (context, state) => const MapScreen(),
+        ),
+        GoRoute(
+          path: '/history',
+          builder: (context, state) => const FieldHistoryScreen(),
         ),
       ],
     ),

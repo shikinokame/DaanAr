@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../core/theme.dart';
 
-/// Bottom navigation shell wrapping Home, Explore (Trails & Landmarks), and Map tabs,
+/// Bottom navigation shell wrapping Home, Explore (Trails & Landmarks), Map, and History tabs,
 /// styled after the Figma archival field-guide bottom bar.
 class ShellScreen extends StatelessWidget {
   final Widget child;
   const ShellScreen({super.key, required this.child});
 
-  static const _tabs = ['/home', '/trails', '/map'];
+  static const _tabs = ['/home', '/trails', '/map', '/history'];
 
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
@@ -56,6 +56,13 @@ class ShellScreen extends StatelessWidget {
                   activeIcon: Icons.map_rounded,
                   selected: index == 2,
                   onTap: () => context.go(_tabs[2]),
+                ),
+                _ArchivalNavItem(
+                  label: 'History',
+                  icon: Icons.history_outlined,
+                  activeIcon: Icons.history_rounded,
+                  selected: index == 3,
+                  onTap: () => context.go(_tabs[3]),
                 ),
               ],
             ),

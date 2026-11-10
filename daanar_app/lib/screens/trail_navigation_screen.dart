@@ -605,7 +605,7 @@ class _TrailNavigationScreenState
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: stops.length,
-                            separatorBuilder: (_, _1) => const Padding(
+                            separatorBuilder: (_, index) => const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 4),
                               child: Icon(
                                 Icons.more_horiz,

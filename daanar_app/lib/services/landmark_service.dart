@@ -4,6 +4,7 @@ import '../core/api_client.dart';
 import '../core/cache_service.dart';
 import '../core/token_storage.dart';
 import '../models/landmark.dart';
+import 'history_service.dart';
 
 final landmarkServiceProvider = Provider<LandmarkService>(
   (ref) => LandmarkService(ref.read(apiClientProvider).dio),
@@ -112,7 +113,18 @@ class LandmarkService {
     String? verificationMethod,
     double? userLat,
     double? userLng,
+    Landmark? landmark,
   }) async {
+    // Record locally into User Visit & AR Viewing History right away
+    try {
+      await HistoryService.instance.recordFromAnalytics(
+        landmarkId: landmarkId,
+        actionType: actionType,
+        verificationMethod: verificationMethod,
+        landmark: landmark,
+      );
+    } catch (_) {}
+
     try {
       final userId = await TokenStorage.getUserId();
       final phone = await TokenStorage.getPhoneNumber();

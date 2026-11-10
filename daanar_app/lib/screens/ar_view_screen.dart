@@ -39,6 +39,7 @@ class _ARViewScreenState extends ConsumerState<ARViewScreen> {
           landmarkId: widget.landmarkId,
           actionType: 'AR_VIEW',
           verificationMethod: 'REMOTE',
+          landmark: widget.landmark,
         );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {

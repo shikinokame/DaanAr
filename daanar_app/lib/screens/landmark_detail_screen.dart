@@ -59,6 +59,7 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
               verificationMethod: 'GPS_GEOFENCE',
               userLat: pos.latitude,
               userLng: pos.longitude,
+              landmark: landmark,
             );
       }
     } catch (_) {
@@ -73,6 +74,7 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
           builder: (_) => ARViewScreen(
             landmarkId: landmark.id,
             landmarkName: landmark.name,
+            landmark: landmark,
           ),
         ),
       );
@@ -106,6 +108,7 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
                     builder: (_) => ARViewScreen(
                       landmarkId: landmark.id,
                       landmarkName: landmark.name,
+                      landmark: landmark,
                     ),
                   ),
                 );
