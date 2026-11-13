@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -96,6 +97,34 @@ class GoogleRoutesTest extends TestCase
         Http::fake(['routes.googleapis.com/*' => Http::response(['error' => ['status' => 'PERMISSION_DENIED', 'message' => 'Private upstream detail']], 403)]);
         $this->postJson('/api/v1/routes/compute', $this->payload())->assertStatus(503)->assertDontSee('Private upstream detail');
         Http::assertSentCount(1);
+    }
+
+    public function test_google_diagnostics_redact_secrets_and_locations_and_find_error_info(): void
+    {
+        $this->signIn();
+        Log::spy();
+        Http::fake(['routes.googleapis.com/*' => Http::response(['error' => [
+            'status' => 'PERMISSION_DENIED',
+            'message' => 'Access denied for server-test-key at 16.0813,120.3427; https://example.test/?key=secret',
+            'details' => [
+                ['@type' => 'type.googleapis.com/google.rpc.LocalizedMessage'],
+                ['@type' => 'type.googleapis.com/google.rpc.ErrorInfo', 'reason' => 'ACCESS_DENIED',
+                    'metadata' => ['service' => 'routes.googleapis.com', 'apiName' => 'routes', 'private' => 'do-not-log']],
+            ],
+        ]], 403)]);
+        $this->postJson('/api/v1/routes/compute', $this->payload())->assertStatus(503)->assertDontSee('Access denied');
+        Log::shouldHaveReceived('warning')->once()->with('Google Routes request failed', \Mockery::on(function ($context) {
+            $logged = json_encode($context);
+
+            return $context['reason'] === 'ACCESS_DENIED'
+                && $context['service'] === 'routes.googleapis.com'
+                && str_contains($context['google_message'], 'Access denied')
+                && ! str_contains($logged, 'server-test-key')
+                && ! str_contains($logged, '16.0813')
+                && ! str_contains($logged, '120.3427')
+                && ! str_contains($logged, 'example.test')
+                && ! str_contains($logged, 'do-not-log');
+        }));
     }
 
     public function test_no_route_does_not_create_a_straight_line_fallback(): void

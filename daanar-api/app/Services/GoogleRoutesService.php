@@ -36,11 +36,26 @@ class GoogleRoutesService
             throw new RoutingUnavailableException('Directions timed out. Check your connection and try again.', 504);
         }
         if (! $response->successful()) {
-            // No API keys, coordinates, or raw upstream responses in logs.
+            // Only log a bounded, redacted explanation and allowlisted metadata.
+            $message = $response->json('error.message');
+            $message = is_string($message) ? $message : '';
+            $privateValues = array_merge([$key], array_map('strval', array_values($origin)), array_map('strval', array_values($destination)));
+            $message = str_replace($privateValues, '[redacted]', $message);
+            $message = preg_replace('/AIza[\w-]+|https?:\/\/\S+/', '[redacted]', $message);
+            $message = substr(str_replace(["\r", "\n"], ' ', $message), 0, 1000);
+            $details = $response->json('error.details', []);
+            $errorInfo = collect(is_array($details) ? $details : [])->first(
+                fn ($detail) => is_array($detail) && ($detail['@type'] ?? '') === 'type.googleapis.com/google.rpc.ErrorInfo',
+                []
+            );
             Log::warning('Google Routes request failed', [
                 'http_status' => $response->status(),
                 'google_status' => $response->json('error.status'),
-                'reason' => $response->json('error.details.0.reason'),
+                'reason' => $errorInfo['reason'] ?? $response->json('error.details.0.reason'),
+                'google_message' => $message,
+                'service' => data_get($errorInfo, 'metadata.service'),
+                'api_name' => data_get($errorInfo, 'metadata.apiName'),
+                'method' => data_get($errorInfo, 'metadata.method'),
                 'travel_mode' => $mode,
             ]);
             throw new RoutingUnavailableException('Google directions are temporarily unavailable. Please try again later.', 503);
