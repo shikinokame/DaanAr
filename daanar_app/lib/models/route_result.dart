@@ -1,5 +1,46 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../services/bearing_service.dart';
+
+enum RouteManeuver {
+  straight,
+  left,
+  right,
+  slightLeft,
+  slightRight,
+  sharpLeft,
+  sharpRight,
+  uTurn,
+  roundabout,
+  arrive,
+  depart;
+
+  static RouteManeuver fromInstruction(String text) {
+    // Street names such as Wright Street or Left Bank Road are not maneuvers.
+    final value = text
+        .toLowerCase()
+        .split(RegExp(r'\b(?:onto|along|towards?)\b'))
+        .first
+        .trim();
+    if (value.startsWith('arriv') || value.startsWith('reach your destination')) {
+      return arrive;
+    }
+    if (value.contains('roundabout') || value.contains('rotary')) {
+      return roundabout;
+    }
+    if (value.contains('u-turn') || value.contains('uturn')) return uTurn;
+    if (value.contains('sharp left')) return sharpLeft;
+    if (value.contains('sharp right')) return sharpRight;
+    if (value.contains('slight left') || value.contains('slightly left')) {
+      return slightLeft;
+    }
+    if (value.contains('slight right') || value.contains('slightly right')) {
+      return slightRight;
+    }
+    if (value.contains('left')) return left;
+    if (value.contains('right')) return right;
+    if (RegExp(r'^(head|start)(\s|$)').hasMatch(value)) return depart;
+    return straight;
+  }
+}
 
 /// A single turn-by-turn maneuver along a calculated street route.
 class RouteStep {
@@ -9,6 +50,7 @@ class RouteStep {
   final String name;
   final int? wayPointStart;
   final int? wayPointEnd;
+  final RouteManeuver? maneuver;
 
   const RouteStep({
     required this.instruction,
@@ -17,7 +59,11 @@ class RouteStep {
     this.name = '',
     this.wayPointStart,
     this.wayPointEnd,
+    this.maneuver,
   });
+
+  RouteManeuver get direction =>
+      maneuver ?? RouteManeuver.fromInstruction(instruction);
 }
 
 /// Result returned by the routing service after a successful route calculation.
@@ -56,38 +102,5 @@ class RouteResult {
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
     return minutes == 0 ? '$hours hr' : '$hours hr $minutes min';
-  }
-
-  /// Returns the active turn-by-turn instruction for [userPos] based on the
-  /// closest vertex along [points].
-  String? activeInstructionFor(LatLng? userPos) {
-    if (steps.isEmpty) return null;
-    if (userPos == null || points.isEmpty) {
-      return steps.first.instruction;
-    }
-
-    int closestVertex = 0;
-    double minDistance = double.infinity;
-    for (int i = 0; i < points.length; i++) {
-      final d = BearingService.distanceMetres(userPos, points[i]);
-      if (d < minDistance) {
-        minDistance = d;
-        closestVertex = i;
-      }
-    }
-
-    for (final step in steps) {
-      final start = step.wayPointStart;
-      final end = step.wayPointEnd;
-      if (start != null && end != null) {
-        if (closestVertex >= start && closestVertex <= end) {
-          // If the user is near the end of the current step and there's a next
-          // maneuver (turn), preview that upcoming turn when within 25m of end.
-          return step.instruction;
-        }
-      }
-    }
-
-    return steps.first.instruction;
   }
 }

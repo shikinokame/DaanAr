@@ -8,19 +8,22 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../core/theme.dart';
 import '../models/landmark.dart';
+import '../models/route_result.dart';
 import '../providers/location_provider.dart';
 import '../services/bearing_service.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
+import '../services/navigation_guidance.dart';
+import '../widgets/turn_guidance_banner.dart';
 
-/// Live Camera AR Directional Wayfinder with 3D Red Extruded Ground Chevrons,
-/// Green Corner Reticles, Top Destination/Distance Card, and Floating Mini-Map.
+/// Walking maneuvers with approximate GPS/compass arrows and a live mini-map.
 class ArDirectionScreen extends ConsumerStatefulWidget {
   final Landmark targetStop;
   final int stopNumber;
   final int totalStops;
   final String? nextInstruction;
   final List<LatLng> segmentPoints;
+  final RouteResult? route;
   final VoidCallback? onMarkArrived;
 
   const ArDirectionScreen({
@@ -30,6 +33,7 @@ class ArDirectionScreen extends ConsumerStatefulWidget {
     required this.totalStops,
     this.nextInstruction,
     this.segmentPoints = const [],
+    this.route,
     this.onMarkArrived,
   });
 
@@ -38,10 +42,11 @@ class ArDirectionScreen extends ConsumerStatefulWidget {
 }
 
 class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   CameraController? _cameraController;
   bool _cameraInitialized = false;
   bool _cameraPermissionDenied = false;
+  int _cameraGeneration = 0;
 
   StreamSubscription<dynamic>? _posSub;
   StreamSubscription<CompassEvent>? _compassSub;
@@ -52,6 +57,13 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
   bool _showCalibrationSlider = false;
   List<LatLng> _fetchedRoutePoints = const [];
   bool _isFetchingRoute = false;
+  RouteResult? _route;
+  NavigationGuidance? _guidance;
+  NavigationProgress? _progress;
+  DateTime? _lastRouteAttempt;
+  bool _hasCompass = false;
+  bool _accurateGps = false;
+  String? _gpsError;
 
   GoogleMapController? _miniMapController;
   late final AnimationController _flowController;
@@ -59,6 +71,9 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _route = widget.route;
+    if (_route != null) _guidance = NavigationGuidance(_route!);
     _flowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
@@ -68,14 +83,18 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
   }
 
   Future<void> _initCamera() async {
+    final generation = ++_cameraGeneration;
+    CameraController? controller;
     try {
       final status = await Permission.camera.request();
+      if (!mounted || generation != _cameraGeneration) return;
       if (!status.isGranted) {
         if (mounted) setState(() => _cameraPermissionDenied = true);
         return;
       }
 
       final cameras = await availableCameras();
+      if (!mounted || generation != _cameraGeneration) return;
       if (cameras.isEmpty) {
         if (mounted) setState(() => _cameraPermissionDenied = true);
         return;
@@ -86,14 +105,14 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
         orElse: () => cameras.first,
       );
 
-      final controller = CameraController(
+      controller = CameraController(
         backCam,
-        ResolutionPreset.high,
+        ResolutionPreset.medium,
         enableAudio: false,
       );
 
       await controller.initialize();
-      if (!mounted) {
+      if (!mounted || generation != _cameraGeneration) {
         await controller.dispose();
         return;
       }
@@ -104,20 +123,47 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
         _cameraPermissionDenied = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _cameraPermissionDenied = true);
+      await controller?.dispose();
+      if (mounted && generation == _cameraGeneration) {
+        setState(() => _cameraPermissionDenied = true);
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      _cameraGeneration++;
+      final camera = _cameraController;
+      _cameraController = null;
+      _cameraInitialized = false;
+      camera?.dispose();
+      _flowController.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      _initCamera();
+      _flowController.repeat();
     }
   }
 
   Future<void> _initCompassAndGps() async {
     // 1. Real-time magnetometer compass stream
-    _compassSub = FlutterCompass.events?.listen((event) {
-      final heading = event.heading;
-      if (heading != null && heading.isFinite && mounted) {
-        setState(() {
-          _compassHeading = (heading + 360.0) % 360.0;
-        });
-      }
-    });
+    _compassSub = FlutterCompass.events?.listen(
+      (event) {
+        final heading = event.heading;
+        if (heading != null && heading.isFinite && mounted) {
+          setState(() {
+            _compassHeading = (heading + 360.0) % 360.0;
+            _hasCompass = true;
+          });
+        } else if (mounted) {
+          setState(() => _hasCompass = false);
+        }
+      },
+      onError: (_) {
+        if (mounted) setState(() => _hasCompass = false);
+      },
+    );
 
     // 2. Seed GPS from locationProvider or request fresh fix
     final locState = ref.read(locationProvider);
@@ -126,11 +172,11 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
         locState.position.latitude,
         locState.position.longitude,
       );
-      if (locState.position.heading.isFinite && locState.position.heading > 0) {
-        _compassHeading = locState.position.heading;
-      }
+      _accurateGps = locState.position.accuracy <= 40;
+      _progress = _guidance?.at(_userPos!);
     } else {
       await ref.read(locationProvider.notifier).requestLocation();
+      if (!mounted) return;
       final updated = ref.read(locationProvider);
       if (updated is LocationReady && mounted) {
         setState(() {
@@ -138,20 +184,40 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
             updated.position.latitude,
             updated.position.longitude,
           );
+          _accurateGps = updated.position.accuracy <= 40;
+          _progress = _guidance?.at(_userPos!);
         });
       }
     }
 
+    if (!mounted) return;
+    if (_userPos == null) {
+      setState(() => _gpsError = 'Enable location to start walking guidance');
+      return;
+    }
     // 3. Continuous GPS stream
-    _posSub = LocationService.getPositionStream().listen((pos) {
-      if (!mounted) return;
-      final nextPos = LatLng(pos.latitude, pos.longitude);
-      setState(() {
-        _userPos = nextPos;
-      });
-      _miniMapController?.animateCamera(CameraUpdate.newLatLng(nextPos));
-      _ensureRoadRouteIfNeeded(nextPos);
-    });
+    _posSub = LocationService.getPositionStream().listen(
+      (pos) {
+        if (!mounted) return;
+        final nextPos = LatLng(pos.latitude, pos.longitude);
+        setState(() {
+          _userPos = nextPos;
+          _accurateGps = pos.accuracy <= 40;
+          _gpsError = null;
+          _progress = _guidance?.at(nextPos, previousAlong: _progress?.along);
+        });
+        _miniMapController?.animateCamera(CameraUpdate.newLatLng(nextPos));
+        _ensureRoadRouteIfNeeded(nextPos);
+      },
+      onError: (_) {
+        if (mounted) {
+          setState(() {
+            _accurateGps = false;
+            _gpsError = 'GPS unavailable - return to the map';
+          });
+        }
+      },
+    );
 
     if (_userPos != null) {
       _ensureRoadRouteIfNeeded(_userPos!);
@@ -159,12 +225,18 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
   }
 
   Future<void> _ensureRoadRouteIfNeeded(LatLng origin) async {
-    if (widget.segmentPoints.length >= 2 ||
-        _fetchedRoutePoints.length >= 2 ||
-        _isFetchingRoute) {
+    if (!_accurateGps ||
+        _isFetchingRoute ||
+        (_route != null && !(_progress?.offRoute ?? false))) {
       return;
     }
-    _isFetchingRoute = true;
+    if (_lastRouteAttempt != null &&
+        DateTime.now().difference(_lastRouteAttempt!) <
+            const Duration(seconds: 15)) {
+      return;
+    }
+    _lastRouteAttempt = DateTime.now();
+    setState(() => _isFetchingRoute = true);
     try {
       final route = await RoutingService.getRoute(
         origin: origin,
@@ -173,46 +245,22 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
       if (mounted && route.points.length >= 2) {
         setState(() {
           _fetchedRoutePoints = route.points;
+          _route = route;
+          _guidance = NavigationGuidance(route);
+          _progress = _guidance!.at(_userPos ?? origin);
         });
       }
     } catch (_) {
       // Keep empty if offline
     } finally {
-      _isFetchingRoute = false;
+      if (mounted) setState(() => _isFetchingRoute = false);
     }
-  }
-
-  /// Finds the next immediate waypoint along `segmentPoints` ahead of the user
-  /// (at least ~12 metres ahead) so the ground chevrons follow the street path
-  /// rather than pointing through buildings. Falls back to the stop coordinates.
-  LatLng _nextPathTarget(LatLng user, LatLng finalStop) {
-    final pts = widget.segmentPoints.length >= 2
-        ? widget.segmentPoints
-        : _fetchedRoutePoints;
-    if (pts.length < 2) return finalStop;
-
-    int closestIdx = 0;
-    double closestDist = double.infinity;
-    for (int i = 0; i < pts.length; i++) {
-      final d = BearingService.distanceMetres(user, pts[i]);
-      if (d < closestDist) {
-        closestDist = d;
-        closestIdx = i;
-      }
-    }
-
-    // Look ahead along the polyline for a point at least 12m away
-    for (int i = closestIdx + 1; i < pts.length; i++) {
-      final d = BearingService.distanceMetres(user, pts[i]);
-      if (d >= 12.0) {
-        return pts[i];
-      }
-    }
-    return finalStop;
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cameraGeneration++;
     _posSub?.cancel();
     _compassSub?.cancel();
     _miniMapController?.dispose();
@@ -226,11 +274,9 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
     final stopPos = LatLng(widget.targetStop.lat, widget.targetStop.lng);
     final userPos = _userPos ?? stopPos;
 
-    final distMetres = _userPos != null
-        ? BearingService.distanceMetres(userPos, stopPos)
-        : 0.0;
+    final distMetres = _progress?.remaining ?? 0.0;
 
-    final immediateTarget = _nextPathTarget(userPos, stopPos);
+    final immediateTarget = _progress?.lookAhead ?? userPos;
     final targetBearing = BearingService.bearingBetween(
       userPos,
       immediateTarget,
@@ -242,9 +288,31 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
       deviceHeading: effectiveHeading,
     );
 
-    final activePolyline = widget.segmentPoints.length >= 2
-        ? widget.segmentPoints
-        : _fetchedRoutePoints;
+    final activePolyline =
+        _route?.points ??
+        (_fetchedRoutePoints.length >= 2
+            ? _fetchedRoutePoints
+            : widget.segmentPoints);
+    final showArrows =
+        _userPos != null &&
+        _accurateGps &&
+        _hasCompass &&
+        _progress != null &&
+        !_progress!.offRoute &&
+        relativeAngle.abs() <= 75;
+    final status =
+        _gpsError ??
+        (!_accurateGps
+            ? 'Waiting for accurate GPS'
+            : !_hasCompass
+            ? 'Compass unavailable - use the map'
+            : _progress?.offRoute == true
+            ? 'Off route - follow the map'
+            : _route == null
+            ? 'Road directions unavailable - return to map'
+            : !showArrows
+            ? 'Turn your phone to face the route'
+            : 'GPS guidance - approximate arrows');
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -273,35 +341,23 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
             ),
           ),
 
-          // 2. 3D Red Extruded Ground Chevrons on the Walkway
-          Positioned.fill(
-            child: IgnorePointer(
-              child: AnimatedBuilder(
-                animation: _flowController,
-                builder: (context, _) {
-                  return CustomPaint(
-                    painter: _GroundChevronsPainter(
-                      relativeAngleDegrees: relativeAngle,
-                      pulseProgress: _flowController.value,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-
-          // 3. Neon Green Scanner Corner Brackets (⌜ ⌝ / ⌞ ⌟)
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 56, 18, 22),
+          // Gold GPS/compass arrows; hide when location or alignment is unreliable.
+          if (showArrows)
+            Positioned.fill(
               child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _GreenCornerReticlePainter(),
-                  child: const SizedBox.expand(),
+                child: AnimatedBuilder(
+                  animation: _flowController,
+                  builder: (context, _) {
+                    return CustomPaint(
+                      painter: _GroundChevronsPainter(
+                        relativeAngleDegrees: relativeAngle,
+                        pulseProgress: _flowController.value,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
-          ),
 
           // 4. Top Navigation Controls + Frosted Destination/Distance Card
           SafeArea(
@@ -332,81 +388,14 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
                   ),
                   const SizedBox(height: 10),
 
-                  // Screenshot-style translucent Destination & Distance Card
-                  Center(
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 340),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF262A2E).withValues(alpha: 0.72),
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          width: 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.28),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            widget.targetStop.name,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.2,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black54,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _userPos != null
-                                ? BearingService.formatDistance(distMetres)
-                                : 'Locating GPS...',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                          if (widget.nextInstruction != null &&
-                              widget.nextInstruction!.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              widget.nextInstruction!,
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.82),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
+                  TurnGuidanceBanner(
+                    progress: _accurateGps ? _progress : null,
+                    rerouting: _isFetchingRoute,
+                    fallback:
+                        _gpsError ??
+                        (_route == null && !_isFetchingRoute
+                            ? 'No road directions. Return to map or retry.'
+                            : null),
                   ),
 
                   // Optional compact compass trim slider (hidden unless tapped)
@@ -443,7 +432,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
                               value: _headingOffset,
                               min: -180.0,
                               max: 180.0,
-                              activeColor: const Color(0xFFEF2323),
+                              activeColor: const Color(0xFFD4A853),
                               inactiveColor: Colors.white24,
                               onChanged: (v) =>
                                   setState(() => _headingOffset = v),
@@ -477,71 +466,152 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
           ),
 
           // 5. Floating Right-Side Mini-Map (matches screenshot)
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 185,
-            right: 18,
-            child: Container(
-              width: 122,
-              height: 128,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.85),
-                  width: 2,
+          if (MediaQuery.sizeOf(context).height >= 700 &&
+              !_showCalibrationSlider)
+            Positioned(
+              bottom: MediaQuery.of(context).padding.bottom + 230,
+              right: 18,
+              child: Container(
+                width: 122,
+                height: 128,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: userPos,
+                        zoom: 16.5,
+                      ),
+                      onMapCreated: (c) => _miniMapController = c,
+                      myLocationEnabled: true,
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: false,
+                      mapToolbarEnabled: false,
+                      compassEnabled: false,
+                      rotateGesturesEnabled: false,
+                      scrollGesturesEnabled: false,
+                      zoomGesturesEnabled: false,
+                      tiltGesturesEnabled: false,
+                      markers: {
+                        Marker(
+                          markerId: const MarkerId('ar_mini_target'),
+                          position: stopPos,
+                          icon: BitmapDescriptor.defaultMarkerWithHue(
+                            BitmapDescriptor.hueRed,
+                          ),
+                        ),
+                      },
+                      polylines: {
+                        if (activePolyline.length >= 2)
+                          Polyline(
+                            polylineId: const PolylineId('ar_mini_route'),
+                            points: activePolyline,
+                            color: AppColors.brass,
+                            width: 5,
+                          ),
+                      },
+                    ),
+                    // Tap mini-map to return to full map view
+                    Positioned.fill(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => Navigator.of(context).pop(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
+            ),
+          Positioned(
+            bottom: MediaQuery.paddingOf(context).bottom + 12,
+            left: 12,
+            right: 12,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.inkDeep,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.brass),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GoogleMap(
-                    initialCameraPosition: CameraPosition(
-                      target: userPos,
-                      zoom: 16.5,
+                  Text(
+                    widget.targetStop.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.surface,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
                     ),
-                    onMapCreated: (c) => _miniMapController = c,
-                    myLocationEnabled: true,
-                    myLocationButtonEnabled: false,
-                    zoomControlsEnabled: false,
-                    mapToolbarEnabled: false,
-                    compassEnabled: false,
-                    rotateGesturesEnabled: false,
-                    scrollGesturesEnabled: false,
-                    zoomGesturesEnabled: false,
-                    tiltGesturesEnabled: false,
-                    markers: {
-                      Marker(
-                        markerId: const MarkerId('ar_mini_target'),
-                        position: stopPos,
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueRed,
-                        ),
-                      ),
-                    },
-                    polylines: {
-                      if (activePolyline.length >= 2)
-                        Polyline(
-                          polylineId: const PolylineId('ar_mini_route'),
-                          points: activePolyline,
-                          color: const Color(0xFF2563EB),
-                          width: 5,
-                        ),
-                    },
                   ),
-                  // Tap mini-map to return to full map view
-                  Positioned.fill(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => Navigator.of(context).pop(),
-                      ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _progress == null
+                        ? 'Waiting for road directions'
+                        : '${_progress!.etaLabel} - ${BearingService.formatDistance(distMetres)} remaining',
+                    style: const TextStyle(
+                      color: AppColors.surface,
+                      fontSize: 16,
                     ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    status,
+                    style: const TextStyle(
+                      color: AppColors.brass,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => Navigator.pop(context),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.brass,
+                            foregroundColor: AppColors.inkDeep,
+                          ),
+                          icon: const Icon(Icons.map_outlined),
+                          label: const Text('Back to map'),
+                        ),
+                      ),
+                      if (_route == null &&
+                          !_isFetchingRoute &&
+                          _userPos != null) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: () {
+                            _lastRouteAttempt = null;
+                            _ensureRoadRouteIfNeeded(_userPos!);
+                          },
+                          tooltip: 'Retry road directions',
+                          icon: const Icon(
+                            Icons.refresh,
+                            color: AppColors.brass,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -625,7 +695,7 @@ class _CircleIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: active
-          ? const Color(0xFFEF2323)
+          ? const Color(0xFFD4A853)
           : Colors.black.withValues(alpha: 0.48),
       shape: const CircleBorder(),
       child: InkWell(
@@ -643,62 +713,6 @@ class _CircleIconButton extends StatelessWidget {
   }
 }
 
-/// Draws the 4 neon-green corner brackets (`⌜ ⌝` / `⌞ ⌟`) from the screenshot.
-class _GreenCornerReticlePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF34D399).withValues(alpha: 0.9)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.5
-      ..strokeCap = StrokeCap.square;
-
-    const double arm = 26.0;
-
-    // Top-left
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, arm)
-        ..lineTo(0, 0)
-        ..lineTo(arm, 0),
-      paint,
-    );
-
-    // Top-right
-    canvas.drawPath(
-      Path()
-        ..moveTo(size.width - arm, 0)
-        ..lineTo(size.width, 0)
-        ..lineTo(size.width, arm),
-      paint,
-    );
-
-    // Bottom-left
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, size.height - arm)
-        ..lineTo(0, size.height)
-        ..lineTo(arm, size.height),
-      paint,
-    );
-
-    // Bottom-right
-    canvas.drawPath(
-      Path()
-        ..moveTo(size.width - arm, size.height)
-        ..lineTo(size.width, size.height)
-        ..lineTo(size.width, size.height - arm),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Renders 3 stacked 3D extruded red ground chevrons (`^`) in perspective along
-/// the walkway on the lower half of the camera preview, rotating smoothly toward
-/// the next route waypoint.
 class _GroundChevronsPainter extends CustomPainter {
   final double relativeAngleDegrees;
   final double pulseProgress;
@@ -719,26 +733,11 @@ class _GroundChevronsPainter extends CustomPainter {
     // back-to-front so nearer chevrons naturally overlap if angled.
     const chevronRows = [
       // Furthest chevron up the walkway
-      (
-        yFactor: 0.45,
-        scale: 0.46,
-        extrudeDepth: 9.0,
-        stepIndex: 2,
-      ),
+      (yFactor: 0.45, scale: 0.46, extrudeDepth: 9.0, stepIndex: 2),
       // Middle chevron
-      (
-        yFactor: 0.51,
-        scale: 0.68,
-        extrudeDepth: 13.0,
-        stepIndex: 1,
-      ),
+      (yFactor: 0.51, scale: 0.68, extrudeDepth: 13.0, stepIndex: 1),
       // Nearest foreground chevron
-      (
-        yFactor: 0.61,
-        scale: 1.00,
-        extrudeDepth: 19.0,
-        stepIndex: 0,
-      ),
+      (yFactor: 0.61, scale: 1.00, extrudeDepth: 19.0, stepIndex: 0),
     ];
 
     for (final row in chevronRows) {
@@ -786,8 +785,14 @@ class _GroundChevronsPainter extends CustomPainter {
 
     // Inner/front edge (facing the user):
     final innerApex = Offset(0, -chevronRise);
-    final bottomLeft = Offset(-halfWidth + (bandThickness * 0.28), bandThickness * 0.65);
-    final bottomRight = Offset(halfWidth - (bandThickness * 0.28), bandThickness * 0.65);
+    final bottomLeft = Offset(
+      -halfWidth + (bandThickness * 0.28),
+      bandThickness * 0.65,
+    );
+    final bottomRight = Offset(
+      halfWidth - (bandThickness * 0.28),
+      bandThickness * 0.65,
+    );
 
     // 1. Soft ground shadow underneath the 3D chevron block
     final shadowPath = Path()
@@ -806,7 +811,7 @@ class _GroundChevronsPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
     );
 
-    // 2. Left 3D extruded front-facing vertical wall (darker crimson)
+    // 2. Left 3D extruded front-facing vertical wall (darker brass)
     final leftFrontWall = Path()
       ..moveTo(bottomLeft.dx, bottomLeft.dy)
       ..lineTo(innerApex.dx, innerApex.dy)
@@ -818,8 +823,8 @@ class _GroundChevronsPainter extends CustomPainter {
       leftFrontWall,
       Paint()
         ..color = isHighlighted
-            ? const Color(0xFFB91C1C)
-            : const Color(0xFF991B1B)
+            ? const Color(0xFF9B732D)
+            : const Color(0xFF7A5C22)
         ..style = PaintingStyle.fill,
     );
 
@@ -835,8 +840,8 @@ class _GroundChevronsPainter extends CustomPainter {
       rightFrontWall,
       Paint()
         ..color = isHighlighted
-            ? const Color(0xFF991B1B)
-            : const Color(0xFF7F1D1D)
+            ? const Color(0xFF7A5C22)
+            : const Color(0xFF624A1B)
         ..style = PaintingStyle.fill,
     );
 
@@ -847,10 +852,7 @@ class _GroundChevronsPainter extends CustomPainter {
       ..lineTo(bottomLeft.dx, bottomLeft.dy + extrudeHeight)
       ..lineTo(topLeft.dx, topLeft.dy + extrudeHeight)
       ..close();
-    canvas.drawPath(
-      leftSideCap,
-      Paint()..color = const Color(0xFF7F1D1D),
-    );
+    canvas.drawPath(leftSideCap, Paint()..color = const Color(0xFF624A1B));
 
     final rightSideCap = Path()
       ..moveTo(topRight.dx, topRight.dy)
@@ -858,12 +860,9 @@ class _GroundChevronsPainter extends CustomPainter {
       ..lineTo(bottomRight.dx, bottomRight.dy + extrudeHeight)
       ..lineTo(topRight.dx, topRight.dy + extrudeHeight)
       ..close();
-    canvas.drawPath(
-      rightSideCap,
-      Paint()..color = const Color(0xFF6B1414),
-    );
+    canvas.drawPath(rightSideCap, Paint()..color = const Color(0xFF493813));
 
-    // 5. Top bright red chevron surface
+    // 5. Top gold chevron surface
     final topFace = Path()
       ..moveTo(topLeft.dx, topLeft.dy)
       ..lineTo(topApex.dx, topApex.dy)
@@ -877,8 +876,8 @@ class _GroundChevronsPainter extends CustomPainter {
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: isHighlighted
-          ? const [Color(0xFFFF3B3B), Color(0xFFEF2323)]
-          : const [Color(0xFFEF2323), Color(0xFFDC2626)],
+          ? const [Color(0xFFEAC97A), Color(0xFFD4A853)]
+          : const [Color(0xFFD4A853), Color(0xFFBE9444)],
     );
 
     canvas.drawPath(

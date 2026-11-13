@@ -21,6 +21,8 @@ import '../providers/trail_providers.dart';
 import '../services/landmark_service.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
+import '../services/navigation_guidance.dart';
+import '../widgets/turn_guidance_banner.dart';
 import '../widgets/archival.dart';
 import 'ar_direction_screen.dart';
 import 'ar_view_screen.dart';
@@ -97,6 +99,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   // Rerouting & proximity state
   bool _isRerouting = false;
+  NavigationGuidance? _guidance;
+  NavigationProgress? _navProgress;
+  DateTime? _lastRerouteAttempt;
+  int _routeRequestId = 0;
+  bool _navigationGpsAccurate = true;
   bool _arPromptShown = false;
   bool _showArProximityBanner = false;
   bool _physicalVisitLogged = false;
@@ -136,23 +143,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final canvas = Canvas(recorder);
     const center = Offset(size / 2, size / 2);
 
-    canvas.drawCircle(
-      center,
-      20,
-      Paint()..color = const Color(0x331B4332),
-    );
-    canvas.drawCircle(
-      center,
-      10,
-      Paint()..color = AppColors.surface,
-    );
-    canvas.drawCircle(
-      center,
-      7.5,
-      Paint()..color = const Color(0xFF1D6F8A),
-    );
+    canvas.drawCircle(center, 20, Paint()..color = const Color(0x331B4332));
+    canvas.drawCircle(center, 10, Paint()..color = AppColors.surface);
+    canvas.drawCircle(center, 7.5, Paint()..color = const Color(0xFF1D6F8A));
 
-    final img = await recorder.endRecording().toImage(size.toInt(), size.toInt());
+    final img = await recorder.endRecording().toImage(
+      size.toInt(),
+      size.toInt(),
+    );
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
     if (bytes != null && mounted) {
       setState(() {
@@ -206,8 +204,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ? const Color(0xFF8C2D19)
         : (selected ? AppColors.brass : AppColors.inkDeep);
     final Color rimColor = selected ? AppColors.inkDeep : AppColors.brass;
-    final Color textColor =
-        isDestination ? AppColors.surface : (selected ? AppColors.inkDeep : AppColors.surface);
+    final Color textColor = isDestination
+        ? AppColors.surface
+        : (selected ? AppColors.inkDeep : AppColors.surface);
 
     final cx = w / 2;
     final r = selected ? 31.0 : 25.0;
@@ -268,12 +267,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (arReady) {
       final bx = cx + r * 0.68;
       final by = cy - r * 0.68;
-      canvas.drawCircle(Offset(bx, by), 7.5, Paint()..color = AppColors.inkDeep);
+      canvas.drawCircle(
+        Offset(bx, by),
+        7.5,
+        Paint()..color = AppColors.inkDeep,
+      );
       canvas.drawCircle(Offset(bx, by), 5.6, Paint()..color = AppColors.brass);
     }
 
     final img = await recorder.endRecording().toImage(w.toInt(), h.toInt());
-    final ByteData? byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final ByteData? byteData = await img.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
     if (byteData == null) return null;
 
     return BitmapDescriptor.bytes(
@@ -423,7 +428,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     await ref.read(locationProvider.notifier).requestLocation();
     final locState = ref.read(locationProvider);
     if (locState is LocationReady && _mapController != null) {
-      final pos = LatLng(locState.position.latitude, locState.position.longitude);
+      final pos = LatLng(
+        locState.position.latitude,
+        locState.position.longitude,
+      );
       setState(() => _livePosition = pos);
       await _mapController!.animateCamera(
         CameraUpdate.newCameraPosition(
@@ -438,7 +446,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     } else if (locState is LocationError && mounted) {
       _showSnackBar(
         locState.message,
-        action: locState.type == LocationExceptionType.permissionPermanentlyDenied
+        action:
+            locState.type == LocationExceptionType.permissionPermanentlyDenied
             ? SnackBarAction(
                 label: 'Settings',
                 textColor: AppColors.secondary,
@@ -452,10 +461,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   // Routing & live GPS navigation
 
   Future<void> _navigateTo(Landmark destination) async {
+    final requestId = ++_routeRequestId;
     _stopOrbit();
     var locState = ref.read(locationProvider);
     if (locState is! LocationReady) {
       await ref.read(locationProvider.notifier).requestLocation();
+      if (!mounted || requestId != _routeRequestId) return;
       locState = ref.read(locationProvider);
     }
     if (locState is! LocationReady) {
@@ -467,8 +478,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       locState.position.latitude,
       locState.position.longitude,
     );
+    final originAccuracy = locState.position.accuracy;
 
-    ref.read(landmarkServiceProvider).logAnalyticsEvent(
+    ref
+        .read(landmarkServiceProvider)
+        .logAnalyticsEvent(
           landmarkId: destination.id,
           actionType: 'MAP_NAV',
           verificationMethod: 'REMOTE',
@@ -477,10 +491,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         );
 
     setState(() {
+      _positionSubscription?.cancel();
+      _positionSubscription = null;
       _isCalculatingRoute = true;
+      _isRerouting = false;
       _activeRoute = null;
+      _guidance = null;
+      _navProgress = null;
+      _lastRerouteAttempt = null;
       _routeDestination = destination;
       _livePosition = originPos;
+      _navigationGpsAccurate = originAccuracy <= 40;
       _physicalVisitLogged = false;
       _showModePicker = false;
     });
@@ -493,15 +514,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         mode: _selectedMode,
       );
 
+      if (!mounted || requestId != _routeRequestId) return;
       setState(() {
+        _guidance = NavigationGuidance(route);
+        _navProgress = _guidance!.at(originPos);
         _activeRoute = route;
         _isCalculatingRoute = false;
         _remainingMetres = route.distanceMetres;
       });
 
       await _fitRouteBounds(originPos, dest);
+      if (!mounted || requestId != _routeRequestId) return;
       _startPositionStream(destination);
     } on RoutingException catch (e) {
+      if (!mounted || requestId != _routeRequestId) return;
       setState(() {
         _isCalculatingRoute = false;
         _routeDestination = null;
@@ -517,7 +543,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _autoCenter = true;
     });
 
-    _positionSubscription = LocationService.getPositionStream().listen((position) {
+    _positionSubscription = LocationService.getPositionStream().listen((
+      position,
+    ) {
       if (!mounted) return;
       final newPos = LatLng(position.latitude, position.longitude);
 
@@ -530,7 +558,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
       setState(() {
         _livePosition = newPos;
-        _remainingMetres = remaining;
+        _navigationGpsAccurate = position.accuracy <= 40;
+        _navProgress = _guidance?.at(
+          newPos,
+          previousAlong: _navProgress?.along,
+        );
+        _remainingMetres = _navProgress?.remaining ?? remaining;
       });
 
       ref.read(locationProvider.notifier).updatePosition(position);
@@ -550,12 +583,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         );
       }
 
-      _checkAndReroute(newPos, destination);
+      if (_navigationGpsAccurate) _checkAndReroute(newPos, destination);
 
       if (!_physicalVisitLogged &&
           remaining <= AppConstants.physicalVisitRadiusMetres) {
         _physicalVisitLogged = true;
-        ref.read(landmarkServiceProvider).logAnalyticsEvent(
+        ref
+            .read(landmarkServiceProvider)
+            .logAnalyticsEvent(
               landmarkId: destination.id,
               actionType: 'PHYSICAL_VISIT',
               verificationMethod: 'GPS_GEOFENCE',
@@ -573,25 +608,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     });
   }
 
-  double _distanceFromRoute(LatLng point, List<LatLng> routePoints) {
-    double minDist = double.infinity;
-    for (final rp in routePoints) {
-      final d = LocationService.distanceBetween(
-        point.latitude,
-        point.longitude,
-        rp.latitude,
-        rp.longitude,
-      );
-      if (d < minDist) minDist = d;
-    }
-    return minDist;
-  }
-
   Future<void> _checkAndReroute(LatLng currentPos, Landmark destination) async {
     if (_activeRoute == null || _isRerouting) return;
-    final deviation = _distanceFromRoute(currentPos, _activeRoute!.points);
+    final deviation =
+        _guidance
+            ?.at(currentPos, previousAlong: _navProgress?.along)
+            .deviation ??
+        0;
     if (deviation <= AppConstants.rerouteThresholdMetres) return;
 
+    if (_lastRerouteAttempt != null &&
+        DateTime.now().difference(_lastRerouteAttempt!) <
+            const Duration(seconds: 15)) {
+      return;
+    }
+    _lastRerouteAttempt = DateTime.now();
+    final oldRoute = _activeRoute;
     setState(() => _isRerouting = true);
 
     try {
@@ -601,23 +633,32 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         destination: dest,
         mode: _selectedMode,
       );
-      if (mounted) {
+      if (mounted && _isNavMode && _activeRoute == oldRoute) {
         setState(() {
+          _guidance = NavigationGuidance(newRoute);
+          _navProgress = _guidance!.at(_livePosition ?? currentPos);
           _activeRoute = newRoute;
           _remainingMetres = newRoute.distanceMetres;
           _isRerouting = false;
         });
       }
     } on RoutingException {
-      if (mounted) setState(() => _isRerouting = false);
+      if (mounted && _activeRoute == oldRoute) {
+        setState(() => _isRerouting = false);
+      }
     }
   }
 
   void _stopNavigation() {
+    _routeRequestId++;
     _positionSubscription?.cancel();
     _positionSubscription = null;
     setState(() {
       _isNavMode = false;
+      _isCalculatingRoute = false;
+      _isRerouting = false;
+      _guidance = null;
+      _navProgress = null;
       _activeRoute = null;
       _routeDestination = null;
       _remainingMetres = null;
@@ -640,7 +681,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         origin.longitude > dest.longitude ? origin.longitude : dest.longitude,
       ),
     );
-    await _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 84));
+    await _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 84),
+    );
   }
 
   void _showSnackBar(String message, {SnackBarAction? action}) {
@@ -712,11 +755,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Set<Circle> _buildDiscoveryCircles(List<Landmark> filtered, LatLng? userPos) {
     final circles = <Circle>{};
     for (final lm in filtered) {
-      final isSelected = _selectedLandmark?.id == lm.id ||
-          _routeDestination?.id == lm.id;
+      final isSelected =
+          _selectedLandmark?.id == lm.id || _routeDestination?.id == lm.id;
       if (!isSelected && _currentZoom < 14.5) continue;
 
-      final insideZone = userPos != null &&
+      final insideZone =
+          userPos != null &&
           LocationService.distanceBetween(
                 userPos.latitude,
                 userPos.longitude,
@@ -751,7 +795,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final locationState = ref.watch(locationProvider);
     final isLocating = locationState is LocationLoading;
 
-    final LatLng? userPos = _livePosition ??
+    final LatLng? userPos =
+        _livePosition ??
         (locationState is LocationReady
             ? LatLng(
                 locationState.position.latitude,
@@ -759,7 +804,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               )
             : null);
 
-    final trails = trailsAsync.whenOrNull(data: (r) => r.trails) ?? const <Trail>[];
+    final trails =
+        trailsAsync.whenOrNull(data: (r) => r.trails) ?? const <Trail>[];
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -831,8 +877,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     markerId: MarkerId(l.id.toString()),
                     position: LatLng(l.lat, l.lng),
                     anchor: const Offset(0.5, 0.92),
-                    icon: _pinIconCache[
-                            '${l.id}_${_selectedLandmark?.id == l.id}_${_routeDestination?.id == l.id}_${l.isArReady}'] ??
+                    icon:
+                        _pinIconCache['${l.id}_${_selectedLandmark?.id == l.id}_${_routeDestination?.id == l.id}_${l.isArReady}'] ??
                         BitmapDescriptor.defaultMarkerWithHue(
                           _selectedLandmark?.id == l.id
                               ? BitmapDescriptor.hueYellow
@@ -849,7 +895,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     markerId: const MarkerId('user_location'),
                     position: userPos,
                     anchor: const Offset(0.5, 0.5),
-                    icon: _userDotIcon ??
+                    icon:
+                        _userDotIcon ??
                         BitmapDescriptor.defaultMarkerWithHue(
                           BitmapDescriptor.hueAzure,
                         ),
@@ -888,7 +935,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   mapToolbarEnabled: false,
                   padding: EdgeInsets.only(
                     top: _isNavMode ? 96 : 94,
-                    bottom: (!_isNavMode && _showCarousel && filtered.isNotEmpty)
+                    bottom:
+                        (!_isNavMode && _showCarousel && filtered.isNotEmpty)
                         ? 176
                         : 18,
                   ),
@@ -949,7 +997,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 _stopOrbit();
                                 setState(() => _selectedMunicipality = null);
                                 _mapController?.animateCamera(
-                                  CameraUpdate.newCameraPosition(_initialPosition),
+                                  CameraUpdate.newCameraPosition(
+                                    _initialPosition,
+                                  ),
                                 );
                               },
                             ),
@@ -959,7 +1009,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 selected: _selectedMunicipality == m.name,
                                 onTap: () {
                                   _stopOrbit();
-                                  setState(() => _selectedMunicipality = m.name);
+                                  setState(
+                                    () => _selectedMunicipality = m.name,
+                                  );
                                   _mapController?.animateCamera(
                                     CameraUpdate.newCameraPosition(
                                       CameraPosition(
@@ -993,8 +1045,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                               label: era,
                               selected: _selectedEra == era,
                               onTap: () => setState(
-                                () => _selectedEra =
-                                    _selectedEra == era ? null : era,
+                                () => _selectedEra = _selectedEra == era
+                                    ? null
+                                    : era,
                               ),
                             ),
                           ),
@@ -1008,9 +1061,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
           // Right-side floating cartographic controls (Style / 3D Tilt / Orbit / Trails / Compass / GPS)
           Positioned(
-            top: _isNavMode
-                ? MediaQuery.of(context).padding.top + 92
-                : 98,
+            top: _isNavMode ? MediaQuery.of(context).padding.top + 92 : 98,
             right: 12,
             child: Column(
               children: [
@@ -1084,7 +1135,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               right: 76,
               child: EngravedFrame(
                 fill: AppColors.surface,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 child: const Row(
                   children: [
                     SizedBox(
@@ -1115,6 +1169,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             _LiveNavPanel(
               destination: _routeDestination!,
               remainingMetres: _remainingMetres,
+              progress: _navigationGpsAccurate ? _navProgress : null,
               initialRoute: _activeRoute,
               autoCenter: _autoCenter,
               isRerouting: _isRerouting,
@@ -1140,7 +1195,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           // Proximity AR Launch Banner (within 50m of destination)
           if (_isNavMode && _showArProximityBanner && _routeDestination != null)
             Positioned(
-              bottom: 92,
+              bottom: 215,
               left: 12,
               right: 12,
               child: _ArProximityBanner(
@@ -1202,17 +1257,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             GestureDetector(
-                              onTap: () =>
-                                  setState(() => _showCarousel = !_showCarousel),
+                              onTap: () => setState(
+                                () => _showCarousel = !_showCarousel,
+                              ),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
                                   vertical: 5,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.inkDeep.withValues(alpha: 0.92),
+                                  color: AppColors.inkDeep.withValues(
+                                    alpha: 0.92,
+                                  ),
                                   border: Border.all(
-                                    color: AppColors.brass.withValues(alpha: 0.55),
+                                    color: AppColors.brass.withValues(
+                                      alpha: 0.55,
+                                    ),
                                     width: 0.8,
                                   ),
                                 ),
@@ -1279,19 +1339,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                   : null;
 
                               return Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
                                 child: _AtlasCarouselCard(
                                   landmark: lm,
                                   isSelected: selected,
-                                  isCalculating: _isCalculatingRoute &&
+                                  isCalculating:
+                                      _isCalculatingRoute &&
                                       _routeDestination?.id == lm.id,
                                   distanceMetres: distM,
                                   selectedMode: _selectedMode,
-                                  onTapCard: () => _flyToLandmark(
-                                    lm,
-                                    currentList: filtered,
-                                  ),
+                                  onTapCard: () =>
+                                      _flyToLandmark(lm, currentList: filtered),
                                   onTapModeToggle: () {
                                     setState(() {
                                       _selectedLandmark = lm;
@@ -1412,7 +1472,9 @@ class _MapControlButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = active ? AppColors.inkDeep : AppColors.surface.withValues(alpha: 0.95);
+    final bg = active
+        ? AppColors.inkDeep
+        : AppColors.surface.withValues(alpha: 0.95);
     final fg = active ? AppColors.brass : AppColors.primary;
     final border = active ? AppColors.brass : AppColors.rule;
 
@@ -1698,7 +1760,9 @@ class _AtlasCarouselCard extends StatelessWidget {
                         onPressed: onOpenAr,
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.inkDeep,
-                          backgroundColor: AppColors.brass.withValues(alpha: 0.2),
+                          backgroundColor: AppColors.brass.withValues(
+                            alpha: 0.2,
+                          ),
                           side: const BorderSide(color: AppColors.brassInk),
                           padding: const EdgeInsets.symmetric(horizontal: 6),
                           shape: RoundedRectangleBorder(
@@ -1756,11 +1820,12 @@ class _AtlasCarouselCard extends StatelessWidget {
   }
 }
 
-// Live Navigation Panel in archival styling
+// Live maneuver banner and destination card share the same route progress.
 class _LiveNavPanel extends StatelessWidget {
   final Landmark destination;
   final double? remainingMetres;
   final RouteResult? initialRoute;
+  final NavigationProgress? progress;
   final bool autoCenter;
   final bool isRerouting;
   final TransportMode mode;
@@ -1771,6 +1836,7 @@ class _LiveNavPanel extends StatelessWidget {
     required this.destination,
     required this.remainingMetres,
     required this.initialRoute,
+    required this.progress,
     required this.autoCenter,
     required this.isRerouting,
     required this.mode,
@@ -1778,177 +1844,120 @@ class _LiveNavPanel extends StatelessWidget {
     required this.onStop,
   });
 
-  String get _distanceLabel {
-    final m = remainingMetres ?? initialRoute?.distanceMetres;
-    if (m == null) return ' ';
-    if (m >= 1000) return '${(m / 1000).toStringAsFixed(1)} KM';
-    return '${m.toStringAsFixed(0)} M';
-  }
-
-  String get _etaLabel {
-    final m = remainingMetres ?? initialRoute?.distanceMetres;
-    if (m == null) return ' ';
-    final minutes = (m / (mode.speedMetresPerSec * 60)).ceil();
-    if (minutes < 60) return '$minutes MIN';
-    final h = minutes ~/ 60;
-    final min = minutes % 60;
-    return min == 0 ? '$h HR' : '$h HR $min MIN';
-  }
-
   @override
   Widget build(BuildContext context) {
+    final distance =
+        progress?.remaining ?? remainingMetres ?? initialRoute?.distanceMetres;
+    final eta =
+        progress?.etaLabel ?? initialRoute?.etaLabel ?? 'Waiting for GPS';
     return Positioned.fill(
       child: Stack(
         children: [
           Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
+            top: MediaQuery.paddingOf(context).top + 8,
             left: 12,
             right: 12,
-            child: EngravedFrame(
-              fill: AppColors.inkDeep,
-              color: AppColors.brass.withValues(alpha: 0.5),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
-                children: [
-                  Icon(mode.icon, color: AppColors.brass, size: 24),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: isRerouting
-                        ? const Text(
-                            'Recalculating route…',
-                            style: TextStyle(
-                              fontFamily: AppFonts.serif,
-                              color: AppColors.surface,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                destination.name,
-                                style: const TextStyle(
-                                  fontFamily: AppFonts.serif,
-                                  color: AppColors.surface,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 17,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '$_distanceLabel  •  $_etaLabel',
-                                style: AppText.meta.copyWith(
-                                  color: AppColors.brass,
-                                  fontSize: 10.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ],
-              ),
+            child: TurnGuidanceBanner(
+              progress: progress,
+              rerouting: isRerouting,
             ),
           ),
           Positioned(
-            bottom: 20,
-            left: 14,
-            right: 14,
-            child: Row(
-              children: [
-                if (!autoCenter)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Material(
-                      color: AppColors.surface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(2),
-                        side: const BorderSide(color: AppColors.rule),
+            bottom: 16,
+            left: 12,
+            right: 12,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.inkDeep,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.brass.withValues(alpha: .5),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(mode.icon, color: AppColors.brass),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          destination.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.surface,
+                            fontSize: 19,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                      child: InkWell(
-                        onTap: onRecenter,
-                        child: const SizedBox(
-                          width: 46,
-                          height: 46,
-                          child: Icon(
+                      if (!autoCenter)
+                        IconButton(
+                          onPressed: onRecenter,
+                          tooltip: 'Recenter map',
+                          icon: const Icon(
                             Icons.my_location,
-                            color: AppColors.primary,
-                            size: 20,
+                            color: AppColors.brass,
                           ),
                         ),
-                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$eta - ${distance == null ? 'Locating GPS' : '${distance >= 1000 ? '${(distance / 1000).toStringAsFixed(1)} km' : '${distance.round()} m'} remaining'}',
+                    style: const TextStyle(
+                      color: AppColors.surface,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ArDirectionScreen(
-                            targetStop: destination,
-                            stopNumber: 1,
-                            totalStops: 1,
-                            segmentPoints: initialRoute?.points ?? const [],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (mode == TransportMode.walking) ...[
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ArDirectionScreen(
+                                  targetStop: destination,
+                                  stopNumber: 1,
+                                  totalStops: 1,
+                                  route: initialRoute,
+                                  segmentPoints:
+                                      initialRoute?.points ?? const [],
+                                ),
+                              ),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.brass,
+                              foregroundColor: AppColors.inkDeep,
+                            ),
+                            icon: const Icon(Icons.explore_outlined),
+                            label: const Text('AR guide'),
                           ),
                         ),
-                      );
-                    },
-                    icon: const Icon(
-                      Icons.explore_outlined,
-                      size: 18,
-                      color: AppColors.brass,
-                    ),
-                    label: const Text(
-                      'AR GUIDE',
-                      style: TextStyle(
-                        fontFamily: AppFonts.sans,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.surface,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(2),
-                        side: const BorderSide(
-                          color: AppColors.brass,
-                          width: 0.9,
+                        const SizedBox(width: 10),
+                      ],
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: onStop,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.surface,
+                            side: const BorderSide(color: AppColors.brass),
+                          ),
+                          icon: const Icon(Icons.close),
+                          label: const Text('End route'),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: onStop,
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text(
-                      'END ROUTE',
-                      style: TextStyle(
-                        fontFamily: AppFonts.sans,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.error,
-                      foregroundColor: AppColors.surface,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -2035,11 +2044,7 @@ class _ArProximityBanner extends StatelessWidget {
           const SizedBox(width: 8),
           GestureDetector(
             onTap: onDismiss,
-            child: const Icon(
-              Icons.close,
-              color: AppColors.surface,
-              size: 18,
-            ),
+            child: const Icon(Icons.close, color: AppColors.surface, size: 18),
           ),
         ],
       ),

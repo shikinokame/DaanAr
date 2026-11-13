@@ -14,6 +14,8 @@ import '../services/bearing_service.dart';
 import '../services/landmark_service.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
+import '../services/navigation_guidance.dart';
+import '../widgets/turn_guidance_banner.dart';
 import 'ar_direction_screen.dart';
 import 'ar_view_screen.dart';
 
@@ -27,8 +29,7 @@ class TrailNavigationScreen extends ConsumerStatefulWidget {
       _TrailNavigationScreenState();
 }
 
-class _TrailNavigationScreenState
-    extends ConsumerState<TrailNavigationScreen> {
+class _TrailNavigationScreenState extends ConsumerState<TrailNavigationScreen> {
   GoogleMapController? _mapController;
   StreamSubscription<dynamic>? _posSub;
   LatLng? _livePos;
@@ -39,6 +40,11 @@ class _TrailNavigationScreenState
   int? _liveRouteStopId;
   LatLng? _lastRoutedOrigin;
   bool _isRoutingLive = false;
+  NavigationGuidance? _navGuidance;
+  NavigationProgress? _navProgress;
+  int? _cachedSegmentId;
+  DateTime? _lastRouteAttempt;
+  int? _lastRouteAttemptStopId;
 
   @override
   void initState() {
@@ -48,6 +54,7 @@ class _TrailNavigationScreenState
 
   Future<void> _startGpsTracking() async {
     await ref.read(locationProvider.notifier).requestLocation();
+    if (!mounted) return;
     final locState = ref.read(locationProvider);
     if (locState is LocationReady && mounted) {
       final initialPos = LatLng(
@@ -72,7 +79,10 @@ class _TrailNavigationScreenState
   void _triggerLiveRouteIfNeeded(LatLng userPos, {Landmark? explicitStop}) {
     Landmark? targetStop = explicitStop;
     if (targetStop == null) {
-      final trail = ref.read(trailDetailProvider(widget.trailId)).valueOrNull?.trail;
+      final trail = ref
+          .read(trailDetailProvider(widget.trailId))
+          .valueOrNull
+          ?.trail;
       if (trail == null || trail.landmarks.isEmpty) return;
       final session = ref.read(trailNavigationProvider(widget.trailId));
       final idx = session.currentStopIndex.clamp(0, trail.landmarks.length - 1);
@@ -80,8 +90,15 @@ class _TrailNavigationScreenState
     }
 
     final stopChanged = _liveRouteStopId != targetStop.id;
+    if (_lastRouteAttemptStopId == targetStop.id &&
+        _lastRouteAttempt != null &&
+        DateTime.now().difference(_lastRouteAttempt!) <
+            const Duration(seconds: 15)) {
+      return;
+    }
     final needsInitialRoute = _liveRoute == null || _lastRoutedOrigin == null;
-    final movedFarFromLastOrigin = _lastRoutedOrigin != null &&
+    final movedFarFromLastOrigin =
+        _lastRoutedOrigin != null &&
         BearingService.distanceMetres(userPos, _lastRoutedOrigin!) > 60.0 &&
         !_isPointNearPolyline(userPos, _liveRoute?.points ?? const [], 45.0);
 
@@ -96,15 +113,19 @@ class _TrailNavigationScreenState
     List<LatLng> polyline,
     double thresholdMetres,
   ) {
-    for (final vertex in polyline) {
-      if (BearingService.distanceMetres(point, vertex) <= thresholdMetres) {
-        return true;
-      }
-    }
-    return false;
+    if (polyline.length < 2) return false;
+    final route = _liveRoute;
+    if (route == null) return false;
+    final guidance = identical(_navGuidance?.route, route)
+        ? _navGuidance!
+        : NavigationGuidance(route);
+    return guidance.at(point, previousAlong: _navProgress?.along).deviation <=
+        thresholdMetres;
   }
 
   Future<void> _fetchLiveWalkRoute(LatLng origin, Landmark stop) async {
+    _lastRouteAttempt = DateTime.now();
+    _lastRouteAttemptStopId = stop.id;
     setState(() {
       _isRoutingLive = true;
       if (_liveRouteStopId != stop.id) {
@@ -165,7 +186,9 @@ class _TrailNavigationScreenState
     LatLng? userPos,
   }) {
     // Log verified PHYSICAL_VISIT + MAP_NAV to backend analytics
-    ref.read(landmarkServiceProvider).logAnalyticsEvent(
+    ref
+        .read(landmarkServiceProvider)
+        .logAnalyticsEvent(
           landmarkId: stop.id,
           actionType: 'PHYSICAL_VISIT',
           verificationMethod: 'GPS_GEOFENCE',
@@ -368,7 +391,8 @@ class _TrailNavigationScreenState
           }
 
           final activeSegment = trail.segmentToStop(currentIdx);
-          final hasLiveRouteForStop = _liveRoute != null &&
+          final hasLiveRouteForStop =
+              _liveRoute != null &&
               _liveRouteStopId == currentStop.id &&
               _liveRoute!.points.length >= 2;
 
@@ -376,34 +400,58 @@ class _TrailNavigationScreenState
           final List<LatLng> activeRoutePoints = hasLiveRouteForStop
               ? _liveRoute!.points
               : (activeSegment != null && activeSegment.points.length >= 2
-                  ? activeSegment.points
-                  : const <LatLng>[]);
+                    ? activeSegment.points
+                    : const <LatLng>[]);
 
-          final liveInstruction = hasLiveRouteForStop
-              ? _liveRoute!.activeInstructionFor(_livePos)
-              : null;
-
-          final nextInstruction = (liveInstruction != null &&
-                  liveInstruction.isNotEmpty)
-              ? liveInstruction
-              : (activeSegment != null && activeSegment.steps.isNotEmpty
-                  ? activeSegment.steps.first.instruction
-                  : (_isRoutingLive
-                      ? 'Calculating walkable road route...'
-                      : 'Follow road toward ${currentStop.name}'));
-
-          final distMetres = hasLiveRouteForStop
-              ? _liveRoute!.distanceMetres
-              : (_livePos != null
-                  ? BearingService.distanceMetres(_livePos!, currentTarget)
-                  : (activeSegment?.distanceM.toDouble() ?? 450.0));
-
-          final etaLabel = hasLiveRouteForStop
-              ? _liveRoute!.etaLabel
-              : BearingService.formatEta(
-                  distMetres,
-                  walking: trail.municipality != null,
-                );
+          if (hasLiveRouteForStop) {
+            if (!identical(_navGuidance?.route, _liveRoute)) {
+              _navGuidance = NavigationGuidance(_liveRoute!);
+              _navProgress = null;
+            }
+          } else if (activeSegment != null && activeRoutePoints.length >= 2) {
+            if (_navGuidance == null ||
+                _cachedSegmentId != activeSegment.id ||
+                _navGuidance?.route == _liveRoute) {
+              _navProgress = null;
+              _cachedSegmentId = activeSegment.id;
+              _navGuidance = NavigationGuidance(
+                RouteResult(
+                  points: activeRoutePoints,
+                  distanceMetres: activeSegment.distanceM.toDouble(),
+                  durationSeconds: activeSegment.durationS.toDouble(),
+                  steps: activeSegment.steps
+                      .map(
+                        (s) => RouteStep(
+                          instruction: s.instruction,
+                          distanceMetres: s.distanceM.toDouble(),
+                          durationSeconds: s.durationS.toDouble(),
+                          name: s.name,
+                        ),
+                      )
+                      .toList(),
+                ),
+              );
+            }
+          } else {
+            _navGuidance = null;
+          }
+          if (_livePos != null) {
+            _navProgress = _navGuidance?.at(
+              _livePos!,
+              previousAlong: _navProgress?.along,
+            );
+          }
+          final nextInstruction =
+              _navProgress?.step?.instruction ??
+              'Follow the highlighted road route';
+          final distMetres =
+              _navProgress?.remaining ??
+              _navGuidance?.route.distanceMetres ??
+              0;
+          final etaLabel =
+              _navProgress?.etaLabel ??
+              _navGuidance?.route.etaLabel ??
+              'Locating GPS';
 
           final markers = <Marker>{
             for (int i = 0; i < stops.length; i++)
@@ -414,8 +462,8 @@ class _TrailNavigationScreenState
                   session.completedStopIds.contains(stops[i].id)
                       ? BitmapDescriptor.hueGreen
                       : (i == currentIdx
-                          ? BitmapDescriptor.hueAzure
-                          : BitmapDescriptor.hueOrange),
+                            ? BitmapDescriptor.hueAzure
+                            : BitmapDescriptor.hueOrange),
                 ),
                 infoWindow: InfoWindow(
                   title: 'Stop ${i + 1}: ${stops[i].name}',
@@ -467,113 +515,61 @@ class _TrailNavigationScreenState
                 onMapCreated: (ctrl) => _mapController = ctrl,
               ),
 
-              // Top Guidance Banner
               SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 14,
-                          offset: const Offset(0, 5),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                        decoration: BoxDecoration(
+                          color: AppColors.inkDeep,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
                           children: [
-                            InkWell(
-                              onTap: () => Navigator.of(context).pop(),
-                              child: const Padding(
-                                padding: EdgeInsets.only(right: 10),
-                                child: Icon(
-                                  Icons.arrow_back_rounded,
-                                  color: Colors.white,
-                                ),
+                            IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(
+                                Icons.arrow_back_rounded,
+                                color: AppColors.surface,
                               ),
                             ),
                             Expanded(
                               child: Text(
                                 session.isCompleted
-                                    ? 'TRAIL COMPLETED • ${trail.name.toUpperCase()}'
-                                    : 'STOP ${currentIdx + 1} OF ${stops.length} • ${(currentStop.municipality?.name ?? trail.coverageLabel).toUpperCase()}',
-                                maxLines: 1,
+                                    ? 'Trail completed'
+                                    : 'Stop ${currentIdx + 1} of ${stops.length}: ${currentStop.name}',
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 11,
+                                  color: AppColors.surface,
                                   fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.9,
-                                  color: AppColors.secondary,
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
                             Text(
-                              '${BearingService.formatDistance(distMetres)} • $etaLabel',
+                              '${BearingService.formatDistance(distMetres)} - $etaLabel',
                               style: const TextStyle(
+                                color: AppColors.brass,
                                 fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.secondary.withValues(
-                                  alpha: 0.2,
-                                ),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.turn_right_rounded,
-                                color: AppColors.secondary,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    currentStop.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    nextInstruction,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 12.5,
-                                      color: Colors.white70,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (!session.isCompleted)
+                        TurnGuidanceBanner(
+                          progress: _navProgress,
+                          rerouting: _isRoutingLive,
                         ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -639,8 +635,8 @@ class _TrailNavigationScreenState
                                     color: done
                                         ? Colors.green.shade600
                                         : (active
-                                            ? AppColors.primary
-                                            : AppColors.background),
+                                              ? AppColors.primary
+                                              : AppColors.background),
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   alignment: Alignment.center,
@@ -675,6 +671,7 @@ class _TrailNavigationScreenState
                                         totalStops: stops.length,
                                         nextInstruction: nextInstruction,
                                         segmentPoints: activeRoutePoints,
+                                        route: _navGuidance?.route,
                                         onMarkArrived: () => _handleStopArrived(
                                           trail,
                                           currentStop,
