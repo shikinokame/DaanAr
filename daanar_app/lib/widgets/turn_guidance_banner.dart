@@ -9,11 +9,15 @@ class TurnGuidanceBanner extends StatelessWidget {
   final NavigationProgress? progress;
   final bool rerouting;
   final String? fallback;
+  final RouteResult? route;
+  final String? error;
   const TurnGuidanceBanner({
     super.key,
     this.progress,
     this.rerouting = false,
     this.fallback,
+    this.route,
+    this.error,
   });
 
   static IconData iconFor(RouteManeuver maneuver) => switch (maneuver) {
@@ -124,6 +128,25 @@ class TurnGuidanceBanner extends StatelessWidget {
                 ),
               ],
             ),
+          ],
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              error!,
+              style: const TextStyle(color: AppColors.brass, fontSize: 12),
+            ),
+          ],
+          if (route?.provider == 'google') ...[
+            const SizedBox(height: 8),
+            Text(
+              'Google Maps${route!.advisory == null ? '' : ' · ${route!.advisory}'}',
+              style: const TextStyle(color: AppColors.surface, fontSize: 12),
+            ),
+            for (final warning in route!.warnings)
+              Text(
+                warning,
+                style: const TextStyle(color: AppColors.surface, fontSize: 12),
+              ),
           ],
         ],
       ),

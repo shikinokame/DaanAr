@@ -22,6 +22,7 @@ import '../services/landmark_service.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
 import '../services/navigation_guidance.dart';
+import '../services/route_refresh_policy.dart';
 import '../widgets/turn_guidance_banner.dart';
 import '../widgets/archival.dart';
 import 'ar_direction_screen.dart';
@@ -101,7 +102,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   bool _isRerouting = false;
   NavigationGuidance? _guidance;
   NavigationProgress? _navProgress;
-  DateTime? _lastRerouteAttempt;
+  RouteRefreshPolicy _refreshPolicy = RouteRefreshPolicy();
+  double _navigationAccuracy = 0;
+  String? _routeError;
   int _routeRequestId = 0;
   bool _navigationGpsAccurate = true;
   bool _arPromptShown = false;
@@ -464,7 +467,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final requestId = ++_routeRequestId;
     _stopOrbit();
     var locState = ref.read(locationProvider);
-    if (locState is! LocationReady) {
+    if (locState is! LocationReady ||
+        DateTime.now().difference(locState.position.timestamp) >
+            const Duration(seconds: 20)) {
       await ref.read(locationProvider.notifier).requestLocation();
       if (!mounted || requestId != _routeRequestId) return;
       locState = ref.read(locationProvider);
@@ -498,7 +503,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _activeRoute = null;
       _guidance = null;
       _navProgress = null;
-      _lastRerouteAttempt = null;
+      _refreshPolicy = RouteRefreshPolicy()
+        ..recordAttempt(originPos, DateTime.now());
+      _routeError = null;
+      _navigationAccuracy = originAccuracy;
       _routeDestination = destination;
       _livePosition = originPos;
       _navigationGpsAccurate = originAccuracy <= 40;
@@ -559,6 +567,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       setState(() {
         _livePosition = newPos;
         _navigationGpsAccurate = position.accuracy <= 40;
+        _navigationAccuracy = position.accuracy;
         _navProgress = _guidance?.at(
           newPos,
           previousAlong: _navProgress?.along,
@@ -610,21 +619,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   Future<void> _checkAndReroute(LatLng currentPos, Landmark destination) async {
     if (_activeRoute == null || _isRerouting) return;
-    final deviation =
-        _guidance
-            ?.at(currentPos, previousAlong: _navProgress?.along)
-            .deviation ??
-        0;
-    if (deviation <= AppConstants.rerouteThresholdMetres) return;
-
-    if (_lastRerouteAttempt != null &&
-        DateTime.now().difference(_lastRerouteAttempt!) <
-            const Duration(seconds: 15)) {
+    if (!_refreshPolicy.shouldRefresh(
+      position: currentPos,
+      destination: LatLng(destination.lat, destination.lng),
+      accuracy: _navigationAccuracy,
+      progress: _navProgress,
+      now: DateTime.now(),
+    )) {
       return;
     }
-    _lastRerouteAttempt = DateTime.now();
+    _refreshPolicy.recordAttempt(currentPos, DateTime.now());
     final oldRoute = _activeRoute;
-    setState(() => _isRerouting = true);
+    setState(() {
+      _isRerouting = true;
+      _routeError = null;
+    });
 
     try {
       final dest = LatLng(destination.lat, destination.lng);
@@ -642,9 +651,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           _isRerouting = false;
         });
       }
-    } on RoutingException {
+    } on RoutingException catch (e) {
       if (mounted && _activeRoute == oldRoute) {
-        setState(() => _isRerouting = false);
+        setState(() {
+          _isRerouting = false;
+          _routeError = e.message;
+        });
       }
     }
   }
@@ -717,9 +729,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     if (_showTrailOverlay) {
       for (final trail in trails) {
-        final pts = trail.fullPolylinePoints.isNotEmpty
-            ? trail.fullPolylinePoints
-            : trail.landmarks.map((s) => LatLng(s.lat, s.lng)).toList();
+        final pts = trail.fullPolylinePoints;
         if (pts.length >= 2) {
           polylines.add(
             Polyline(
@@ -740,7 +750,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       polylines.add(
         Polyline(
           polylineId: const PolylineId('active_nav_route'),
-          points: _activeRoute!.points,
+          points:
+              _guidance?.remainingPoints(
+                _navigationGpsAccurate ? _navProgress : null,
+              ) ??
+              _activeRoute!.points,
           color: _atlasStyle == AtlasMapStyle.hybrid
               ? AppColors.brass
               : AppColors.primary,
@@ -1173,6 +1187,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               initialRoute: _activeRoute,
               autoCenter: _autoCenter,
               isRerouting: _isRerouting,
+              routeError: _routeError,
               mode: _selectedMode,
               onRecenter: () {
                 setState(() => _autoCenter = true);
@@ -1828,6 +1843,7 @@ class _LiveNavPanel extends StatelessWidget {
   final NavigationProgress? progress;
   final bool autoCenter;
   final bool isRerouting;
+  final String? routeError;
   final TransportMode mode;
   final VoidCallback onRecenter;
   final VoidCallback onStop;
@@ -1839,6 +1855,7 @@ class _LiveNavPanel extends StatelessWidget {
     required this.progress,
     required this.autoCenter,
     required this.isRerouting,
+    this.routeError,
     required this.mode,
     required this.onRecenter,
     required this.onStop,
@@ -1860,6 +1877,8 @@ class _LiveNavPanel extends StatelessWidget {
             child: TurnGuidanceBanner(
               progress: progress,
               rerouting: isRerouting,
+              route: initialRoute,
+              error: routeError,
             ),
           ),
           Positioned(

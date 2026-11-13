@@ -131,6 +131,23 @@ class NavigationGuidance {
     }
     return route.points.last;
   }
+
+  /// Start the displayed line at the projected position, retaining road bends.
+  /// Keep the full route when GPS is inaccurate/off route; do not draw a shortcut.
+  List<LatLng> remainingPoints(NavigationProgress? progress) {
+    if (progress == null ||
+        progress.offRoute ||
+        route.points.length < 2 ||
+        length == 0) {
+      return route.points;
+    }
+    final along = progress.along.clamp(0.0, length);
+    return [
+      pointAt(along),
+      for (var i = 0; i < route.points.length; i++)
+        if (_distances[i] > along + 0.01) route.points[i],
+    ];
+  }
 }
 
 class NavigationProgress {

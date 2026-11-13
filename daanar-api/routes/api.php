@@ -21,6 +21,9 @@ Route::prefix('admin')->group(function () {
 
 Route::prefix('v1')->group(function () {
 
+    Route::post('routes/compute', [\App\Http\Controllers\Api\RoutingController::class, 'compute'])
+        ->middleware(['auth:sanctum', \App\Http\Middleware\RejectBlockedUser::class, 'throttle:google-routes']);
+
     // Auth
     Route::prefix('auth')->group(function () {
         Route::post('login', [AuthController::class, 'login']);

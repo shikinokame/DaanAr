@@ -14,6 +14,7 @@ import '../services/bearing_service.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
 import '../services/navigation_guidance.dart';
+import '../services/route_refresh_policy.dart';
 import '../widgets/turn_guidance_banner.dart';
 
 /// Walking maneuvers with approximate GPS/compass arrows and a live mini-map.
@@ -60,7 +61,9 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
   RouteResult? _route;
   NavigationGuidance? _guidance;
   NavigationProgress? _progress;
-  DateTime? _lastRouteAttempt;
+  RouteRefreshPolicy _refreshPolicy = RouteRefreshPolicy();
+  double _gpsAccuracy = double.infinity;
+  String? _routeError;
   bool _hasCompass = false;
   bool _accurateGps = false;
   String? _gpsError;
@@ -173,6 +176,10 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
         locState.position.longitude,
       );
       _accurateGps = locState.position.accuracy <= 40;
+      _gpsAccuracy = locState.position.accuracy;
+      if (_route != null) {
+        _refreshPolicy.recordAttempt(_userPos!, DateTime.now());
+      }
       _progress = _guidance?.at(_userPos!);
     } else {
       await ref.read(locationProvider.notifier).requestLocation();
@@ -185,6 +192,10 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
             updated.position.longitude,
           );
           _accurateGps = updated.position.accuracy <= 40;
+          _gpsAccuracy = updated.position.accuracy;
+          if (_route != null) {
+            _refreshPolicy.recordAttempt(_userPos!, DateTime.now());
+          }
           _progress = _guidance?.at(_userPos!);
         });
       }
@@ -203,6 +214,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
         setState(() {
           _userPos = nextPos;
           _accurateGps = pos.accuracy <= 40;
+          _gpsAccuracy = pos.accuracy;
           _gpsError = null;
           _progress = _guidance?.at(nextPos, previousAlong: _progress?.along);
         });
@@ -227,16 +239,20 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
   Future<void> _ensureRoadRouteIfNeeded(LatLng origin) async {
     if (!_accurateGps ||
         _isFetchingRoute ||
-        (_route != null && !(_progress?.offRoute ?? false))) {
+        !_refreshPolicy.shouldRefresh(
+          position: origin,
+          destination: LatLng(widget.targetStop.lat, widget.targetStop.lng),
+          accuracy: _gpsAccuracy,
+          progress: _progress,
+          now: DateTime.now(),
+        )) {
       return;
     }
-    if (_lastRouteAttempt != null &&
-        DateTime.now().difference(_lastRouteAttempt!) <
-            const Duration(seconds: 15)) {
-      return;
-    }
-    _lastRouteAttempt = DateTime.now();
-    setState(() => _isFetchingRoute = true);
+    _refreshPolicy.recordAttempt(origin, DateTime.now());
+    setState(() {
+      _isFetchingRoute = true;
+      _routeError = null;
+    });
     try {
       final route = await RoutingService.getRoute(
         origin: origin,
@@ -250,8 +266,8 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
           _progress = _guidance!.at(_userPos ?? origin);
         });
       }
-    } catch (_) {
-      // Keep empty if offline
+    } on RoutingException catch (e) {
+      if (mounted) setState(() => _routeError = e.message);
     } finally {
       if (mounted) setState(() => _isFetchingRoute = false);
     }
@@ -289,7 +305,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
     );
 
     final activePolyline =
-        _route?.points ??
+        _guidance?.remainingPoints(_accurateGps ? _progress : null) ??
         (_fetchedRoutePoints.length >= 2
             ? _fetchedRoutePoints
             : widget.segmentPoints);
@@ -391,6 +407,8 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
                   TurnGuidanceBanner(
                     progress: _accurateGps ? _progress : null,
                     rerouting: _isFetchingRoute,
+                    route: _route,
+                    error: _routeError,
                     fallback:
                         _gpsError ??
                         (_route == null && !_isFetchingRoute
@@ -601,7 +619,7 @@ class _ArDirectionScreenState extends ConsumerState<ArDirectionScreen>
                         const SizedBox(width: 8),
                         IconButton(
                           onPressed: () {
-                            _lastRouteAttempt = null;
+                            _refreshPolicy = RouteRefreshPolicy();
                             _ensureRoadRouteIfNeeded(_userPos!);
                           },
                           tooltip: 'Retry road directions',

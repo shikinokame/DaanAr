@@ -127,7 +127,8 @@ class Trail {
   factory Trail.fromJson(Map<String, dynamic> json) {
     final municipalityJson = json['municipality'];
     final landmarksJson = json['landmarks'] as List<dynamic>? ?? [];
-    final segmentsJson = json['segments'] as List<dynamic>? ?? [];
+    // Live Google routes are fetched from the user's current position.
+    // Do not reuse legacy ORS or straight-line fallback segments.
 
     return Trail(
       id: json['id'] as int,
@@ -145,22 +146,19 @@ class Trail {
           .map(Landmark.fromJson)
           .toList(),
       landmarksCount: (json['landmarks_count'] as num?)?.toInt(),
-      segments: segmentsJson
-          .whereType<Map<String, dynamic>>()
-          .map(TrailSegment.fromJson)
-          .toList(),
+      segments: const [],
     );
   }
 
-  int get stopCount => landmarks.isNotEmpty
-      ? landmarks.length
-      : (landmarksCount ?? 0);
+  int get stopCount =>
+      landmarks.isNotEmpty ? landmarks.length : (landmarksCount ?? 0);
 
   String get coverageLabel =>
       municipality?.name ?? district ?? 'Pangasinan Heritage Circuit';
 
   String get distanceLabel {
-    final dist = totalDistanceMetres ??
+    final dist =
+        totalDistanceMetres ??
         segments.fold<int>(0, (sum, s) => sum + s.distanceM);
     if (dist <= 0) return 'Multi-stop';
     if (dist >= 1000) {

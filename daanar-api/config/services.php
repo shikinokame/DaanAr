@@ -2,6 +2,11 @@
 
 return [
 
+    'google_routes' => [
+        'key' => env('GOOGLE_ROUTES_API_KEY'),
+        'daily_request_limit' => (int) env('GOOGLE_ROUTES_DAILY_LIMIT', 1000),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

@@ -15,6 +15,7 @@ import '../services/landmark_service.dart';
 import '../services/location_service.dart';
 import '../services/routing_service.dart';
 import '../services/navigation_guidance.dart';
+import '../services/route_refresh_policy.dart';
 import '../widgets/turn_guidance_banner.dart';
 import 'ar_direction_screen.dart';
 import 'ar_view_screen.dart';
@@ -38,13 +39,12 @@ class _TrailNavigationScreenState extends ConsumerState<TrailNavigationScreen> {
   // Live road-snapped walking route from user's GPS position to current stop
   RouteResult? _liveRoute;
   int? _liveRouteStopId;
-  LatLng? _lastRoutedOrigin;
   bool _isRoutingLive = false;
   NavigationGuidance? _navGuidance;
   NavigationProgress? _navProgress;
-  int? _cachedSegmentId;
-  DateTime? _lastRouteAttempt;
-  int? _lastRouteAttemptStopId;
+  RouteRefreshPolicy _refreshPolicy = RouteRefreshPolicy();
+  double _gpsAccuracy = double.infinity;
+  String? _routeError;
 
   @override
   void initState() {
@@ -63,6 +63,7 @@ class _TrailNavigationScreenState extends ConsumerState<TrailNavigationScreen> {
       );
       setState(() {
         _livePos = initialPos;
+        _gpsAccuracy = locState.position.accuracy;
       });
       _triggerLiveRouteIfNeeded(initialPos);
     }
@@ -70,7 +71,14 @@ class _TrailNavigationScreenState extends ConsumerState<TrailNavigationScreen> {
     _posSub = LocationService.getPositionStream().listen((pos) {
       if (!mounted) return;
       final newPos = LatLng(pos.latitude, pos.longitude);
-      setState(() => _livePos = newPos);
+      setState(() {
+        _livePos = newPos;
+        _gpsAccuracy = pos.accuracy;
+        _navProgress = _navGuidance?.at(
+          newPos,
+          previousAlong: _navProgress?.along,
+        );
+      });
       _checkStopProximity(newPos);
       _triggerLiveRouteIfNeeded(newPos);
     });
@@ -89,45 +97,29 @@ class _TrailNavigationScreenState extends ConsumerState<TrailNavigationScreen> {
       targetStop = trail.landmarks[idx];
     }
 
-    final stopChanged = _liveRouteStopId != targetStop.id;
-    if (_lastRouteAttemptStopId == targetStop.id &&
-        _lastRouteAttempt != null &&
-        DateTime.now().difference(_lastRouteAttempt!) <
-            const Duration(seconds: 15)) {
-      return;
+    if (_isRoutingLive) return;
+    if (_liveRouteStopId != targetStop.id) {
+      _refreshPolicy = RouteRefreshPolicy();
+      _liveRoute = null;
+      _navGuidance = null;
+      _navProgress = null;
     }
-    final needsInitialRoute = _liveRoute == null || _lastRoutedOrigin == null;
-    final movedFarFromLastOrigin =
-        _lastRoutedOrigin != null &&
-        BearingService.distanceMetres(userPos, _lastRoutedOrigin!) > 60.0 &&
-        !_isPointNearPolyline(userPos, _liveRoute?.points ?? const [], 45.0);
-
-    if ((stopChanged || needsInitialRoute || movedFarFromLastOrigin) &&
-        !_isRoutingLive) {
+    if (_refreshPolicy.shouldRefresh(
+      position: userPos,
+      destination: LatLng(targetStop.lat, targetStop.lng),
+      accuracy: _gpsAccuracy,
+      progress: _navProgress,
+      now: DateTime.now(),
+    )) {
       _fetchLiveWalkRoute(userPos, targetStop);
     }
   }
 
-  bool _isPointNearPolyline(
-    LatLng point,
-    List<LatLng> polyline,
-    double thresholdMetres,
-  ) {
-    if (polyline.length < 2) return false;
-    final route = _liveRoute;
-    if (route == null) return false;
-    final guidance = identical(_navGuidance?.route, route)
-        ? _navGuidance!
-        : NavigationGuidance(route);
-    return guidance.at(point, previousAlong: _navProgress?.along).deviation <=
-        thresholdMetres;
-  }
-
   Future<void> _fetchLiveWalkRoute(LatLng origin, Landmark stop) async {
-    _lastRouteAttempt = DateTime.now();
-    _lastRouteAttemptStopId = stop.id;
+    _refreshPolicy.recordAttempt(origin, DateTime.now());
     setState(() {
       _isRoutingLive = true;
+      _routeError = null;
       if (_liveRouteStopId != stop.id) {
         _liveRoute = null;
       }
@@ -140,17 +132,30 @@ class _TrailNavigationScreenState extends ConsumerState<TrailNavigationScreen> {
         destination: LatLng(stop.lat, stop.lng),
       );
       if (!mounted) return;
+      final trail = ref
+          .read(trailDetailProvider(widget.trailId))
+          .valueOrNull
+          ?.trail;
+      final index = ref
+          .read(trailNavigationProvider(widget.trailId))
+          .currentStopIndex;
+      if (trail == null ||
+          index < 0 ||
+          index >= trail.landmarks.length ||
+          trail.landmarks[index].id != stop.id) {
+        return;
+      }
       setState(() {
+        _navGuidance = NavigationGuidance(route);
+        _navProgress = _navGuidance!.at(_livePos ?? origin);
         _liveRoute = route;
         _liveRouteStopId = stop.id;
-        _lastRoutedOrigin = origin;
         _isRoutingLive = false;
       });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isRoutingLive = false;
-      });
+    } on RoutingException catch (e) {
+      if (mounted) setState(() => _routeError = e.message);
+    } finally {
+      if (mounted) setState(() => _isRoutingLive = false);
     }
   }
 
@@ -390,57 +395,24 @@ class _TrailNavigationScreenState extends ConsumerState<TrailNavigationScreen> {
             });
           }
 
-          final activeSegment = trail.segmentToStop(currentIdx);
           final hasLiveRouteForStop =
-              _liveRoute != null &&
-              _liveRouteStopId == currentStop.id &&
-              _liveRoute!.points.length >= 2;
-
-          // Road-snapped polyline points for the active leg (never a 2-point straight line)
-          final List<LatLng> activeRoutePoints = hasLiveRouteForStop
-              ? _liveRoute!.points
-              : (activeSegment != null && activeSegment.points.length >= 2
-                    ? activeSegment.points
-                    : const <LatLng>[]);
-
-          if (hasLiveRouteForStop) {
-            if (!identical(_navGuidance?.route, _liveRoute)) {
-              _navGuidance = NavigationGuidance(_liveRoute!);
-              _navProgress = null;
-            }
-          } else if (activeSegment != null && activeRoutePoints.length >= 2) {
-            if (_navGuidance == null ||
-                _cachedSegmentId != activeSegment.id ||
-                _navGuidance?.route == _liveRoute) {
-              _navProgress = null;
-              _cachedSegmentId = activeSegment.id;
-              _navGuidance = NavigationGuidance(
-                RouteResult(
-                  points: activeRoutePoints,
-                  distanceMetres: activeSegment.distanceM.toDouble(),
-                  durationSeconds: activeSegment.durationS.toDouble(),
-                  steps: activeSegment.steps
-                      .map(
-                        (s) => RouteStep(
-                          instruction: s.instruction,
-                          distanceMetres: s.distanceM.toDouble(),
-                          durationSeconds: s.durationS.toDouble(),
-                          name: s.name,
-                        ),
-                      )
-                      .toList(),
-                ),
-              );
-            }
-          } else {
+              _liveRoute != null && _liveRouteStopId == currentStop.id;
+          if (hasLiveRouteForStop &&
+              !identical(_navGuidance?.route, _liveRoute)) {
+            _navGuidance = NavigationGuidance(_liveRoute!);
+            _navProgress = _livePos == null
+                ? null
+                : _navGuidance!.at(_livePos!);
+          }
+          if (!hasLiveRouteForStop) {
             _navGuidance = null;
+            _navProgress = null;
           }
-          if (_livePos != null) {
-            _navProgress = _navGuidance?.at(
-              _livePos!,
-              previousAlong: _navProgress?.along,
-            );
-          }
+          final activeRoutePoints = hasLiveRouteForStop
+              ? _navGuidance!.remainingPoints(
+                  _gpsAccuracy <= 40 ? _navProgress : null,
+                )
+              : const <LatLng>[];
           final nextInstruction =
               _navProgress?.step?.instruction ??
               'Follow the highlighted road route';
@@ -566,7 +538,9 @@ class _TrailNavigationScreenState extends ConsumerState<TrailNavigationScreen> {
                       const SizedBox(height: 8),
                       if (!session.isCompleted)
                         TurnGuidanceBanner(
-                          progress: _navProgress,
+                          progress: _gpsAccuracy <= 40 ? _navProgress : null,
+                          route: hasLiveRouteForStop ? _liveRoute : null,
+                          error: _routeError,
                           rerouting: _isRoutingLive,
                         ),
                     ],

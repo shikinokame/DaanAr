@@ -20,7 +20,8 @@ enum RouteManeuver {
         .split(RegExp(r'\b(?:onto|along|towards?)\b'))
         .first
         .trim();
-    if (value.startsWith('arriv') || value.startsWith('reach your destination')) {
+    if (value.startsWith('arriv') ||
+        value.startsWith('reach your destination')) {
       return arrive;
     }
     if (value.contains('roundabout') || value.contains('rotary')) {
@@ -79,13 +80,26 @@ class RouteResult {
 
   /// Turn-by-turn street instructions along the route.
   final List<RouteStep> steps;
+  final String? provider;
+  final String? travelMode;
+  final List<String> warnings;
 
   const RouteResult({
     required this.points,
     required this.distanceMetres,
     required this.durationSeconds,
     this.steps = const [],
+    this.provider,
+    this.travelMode,
+    this.warnings = const [],
   });
+
+  String? get advisory => switch (travelMode) {
+    'WALK' =>
+      'Walking directions are in beta and may omit sidewalks or pedestrian paths.',
+    'BICYCLE' => 'Bicycle directions are in beta and may omit cycling paths.',
+    _ => null,
+  };
 
   /// Human-readable distance string (e.g. "1.2 km" or "850 m").
   String get distanceLabel {

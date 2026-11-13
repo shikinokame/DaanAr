@@ -377,11 +377,6 @@ class DaanArSeeder extends Seeder
             }
         }
 
-        // Precompute ORS / fallback route segments for all seeded trails
-        try {
-            \Illuminate\Support\Facades\Artisan::call('trails:precompute-routes');
-        } catch (\Throwable $e) {
-            // Ignore if trail_segments migration hasn't run yet
-        }
+        // Navigation routes are requested live from Google; no route data is seeded.
     }
 }
