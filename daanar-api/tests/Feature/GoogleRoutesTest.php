@@ -73,11 +73,11 @@ class GoogleRoutesTest extends TestCase
         Http::assertSentCount(1);
     }
 
-    public function test_driving_and_bicycle_modes_are_not_silently_changed(): void
+    public function test_driving_motorcycle_and_bicycle_modes_are_not_silently_changed(): void
     {
         $this->signIn();
         Http::fake(['routes.googleapis.com/*' => Http::response($this->route())]);
-        foreach (['DRIVE', 'BICYCLE'] as $mode) {
+        foreach (['DRIVE', 'TWO_WHEELER', 'BICYCLE'] as $mode) {
             $this->postJson('/api/v1/routes/compute', $this->payload($mode))->assertOk()->assertJsonPath('travel_mode', $mode);
             Http::assertSent(fn ($r) => $r['travelMode'] === $mode);
         }

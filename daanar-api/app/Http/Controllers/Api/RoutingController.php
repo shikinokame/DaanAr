@@ -20,7 +20,7 @@ class RoutingController extends Controller
             'destination' => 'required|array:latitude,longitude',
             'destination.latitude' => 'required|numeric|between:-90,90',
             'destination.longitude' => 'required|numeric|between:-180,180',
-            'travel_mode' => ['required', Rule::in(['WALK', 'DRIVE', 'BICYCLE'])],
+            'travel_mode' => ['required', Rule::in(['WALK', 'DRIVE', 'TWO_WHEELER', 'BICYCLE'])],
         ]);
         try {
             $result = $routes->compute(array_map('floatval', $data['origin']), array_map('floatval', $data['destination']), $data['travel_mode']);
