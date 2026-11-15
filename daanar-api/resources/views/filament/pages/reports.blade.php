@@ -2,39 +2,6 @@
 
     @php $stats = $this->getStatsData(); @endphp
 
-    <style>
-        @media print {
-            .no-print,
-            aside,
-            header,
-            nav,
-            .fi-sidebar,
-            .fi-topbar,
-            .fi-ta-header-toolbar,
-            .fi-pagination {
-                display: none !important;
-            }
-            .print-only-header {
-                display: block !important;
-            }
-            body, .fi-main {
-                background: #fff !important;
-                color: #000 !important;
-            }
-        }
-        .print-only-header {
-            display: none;
-        }
-    </style>
-
-    {{-- Print-only Report Header --}}
-    <div class="print-only-header mb-4 border-b border-gray-300 pb-3">
-        <h1 class="text-xl font-bold">DaanAR Landmark Visit Analytics Report</h1>
-        <p class="text-sm text-gray-600">
-            Period: <strong>{{ $stats['period_label'] }}</strong> • Generated: {{ now()->format('M d, Y h:i A') }}
-        </p>
-    </div>
-
     {{-- Top Controls: Date Range Filter & Export Actions --}}
     <div class="no-print mb-6 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900 lg:flex-row lg:items-center lg:justify-between">
         <div class="flex flex-wrap items-center gap-3">
@@ -75,10 +42,49 @@
             </span>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2" x-data="{
+            preparing: false,
+            async openPrintReport() {
+                const reportWindow = window.open('', '_blank');
+                if (!reportWindow) {
+                    window.alert('Allow pop-ups for DaanAR to open the print report.');
+                    return;
+                }
+                reportWindow.opener = null;
+                reportWindow.document.title = 'Preparing DaanAR report';
+                reportWindow.document.body.textContent = 'Preparing the filtered report...';
+                this.preparing = true;
+                try {
+                    const html = await $wire.printReport();
+                    if (reportWindow.closed) return;
+                    reportWindow.document.open();
+                    reportWindow.document.write(html);
+                    reportWindow.document.close();
+                    reportWindow.focus();
+                    reportWindow.setTimeout(() => reportWindow.print(), 300);
+                } catch (error) {
+                    reportWindow.close();
+                    window.alert('The report could not be prepared. Please refresh the page and try again.');
+                } finally {
+                    this.preparing = false;
+                }
+            }
+        }">
+            <button
+                type="button"
+                wire:click="exportExcel"
+                wire:loading.attr="disabled"
+                wire:target="exportExcel,exportCsv,printReport"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-white/15 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+                <x-heroicon-o-table-cells class="h-4 w-4 text-primary-500" />
+                Export Excel (.xlsx)
+            </button>
             <button
                 type="button"
                 wire:click="exportCsv"
+                wire:loading.attr="disabled"
+                wire:target="exportExcel,exportCsv,printReport"
                 class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-white/15 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
             >
                 <x-heroicon-o-arrow-down-tray class="h-4 w-4 text-primary-500" />
@@ -87,11 +93,12 @@
 
             <button
                 type="button"
-                onclick="window.print()"
+                x-on:click="openPrintReport()"
+                x-bind:disabled="preparing"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-500"
             >
                 <x-heroicon-o-printer class="h-4 w-4" />
-                Export PDF / Print Report
+                <span x-text="preparing ? 'Preparing report...' : 'Export PDF / Print Report'">Export PDF / Print Report</span>
             </button>
         </div>
     </div>

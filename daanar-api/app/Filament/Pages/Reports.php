@@ -4,7 +4,10 @@ namespace App\Filament\Pages;
 
 use App\Models\Landmark;
 use App\Models\LandmarkVisit;
+use App\Models\Municipality;
+use App\Services\LandmarkReportExport;
 use Carbon\Carbon;
+use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Tables;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -12,6 +15,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class Reports extends Page implements HasTable
@@ -68,13 +72,13 @@ class Reports extends Page implements HasTable
     public function getResolvedDateRange(): array
     {
         return match ($this->datePeriod) {
-            'today' => [now()->startOfDay(), now()->endOfDay(), 'Today (' . now()->format('M d, Y') . ')'],
-            'week'  => [now()->startOfWeek(), now()->endOfWeek(), 'This Week (' . now()->startOfWeek()->format('M d') . ' – ' . now()->endOfWeek()->format('M d, Y') . ')'],
-            'month' => [now()->startOfMonth(), now()->endOfMonth(), 'This Month (' . now()->format('F Y') . ')'],
+            'today' => [now()->startOfDay(), now()->endOfDay(), 'Today ('.now()->format('M d, Y').')'],
+            'week' => [now()->startOfWeek(), now()->endOfWeek(), 'This Week ('.now()->startOfWeek()->format('M d').' – '.now()->endOfWeek()->format('M d, Y').')'],
+            'month' => [now()->startOfMonth(), now()->endOfMonth(), 'This Month ('.now()->format('F Y').')'],
             'custom' => [
                 $this->startDate ? Carbon::parse($this->startDate)->startOfDay() : null,
                 $this->endDate ? Carbon::parse($this->endDate)->endOfDay() : null,
-                'Custom (' . ($this->startDate ?: 'Start') . ' to ' . ($this->endDate ?: 'Now') . ')',
+                'Custom ('.($this->startDate ?: 'Start').' to '.($this->endDate ?: 'Now').')',
             ],
             default => [null, null, 'All Time'],
         };
@@ -114,7 +118,7 @@ class Reports extends Page implements HasTable
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->label('Landmark')
-                    ->description(fn (Landmark $record): string => ($record->municipality?->name ?? 'Pangasinan') . ' • ' . ucfirst((string) $record->category))
+                    ->description(fn (Landmark $record): string => ($record->municipality?->name ?? 'Pangasinan').' • '.ucfirst((string) $record->category))
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
@@ -127,8 +131,8 @@ class Reports extends Page implements HasTable
                     ->color(fn (int $state): string => match (true) {
                         $state >= 50 => 'success',
                         $state >= 10 => 'warning',
-                        $state > 0   => 'info',
-                        default      => 'gray',
+                        $state > 0 => 'info',
+                        default => 'gray',
                     })
                     ->icon('heroicon-m-map-pin')
                     ->weight('bold'),
@@ -180,11 +184,11 @@ class Reports extends Page implements HasTable
 
                 Tables\Filters\SelectFilter::make('category')
                     ->options([
-                        'church'     => 'Church',
-                        'park'       => 'Park',
+                        'church' => 'Church',
+                        'park' => 'Park',
                         'historical' => 'Historical',
-                        'natural'    => 'Natural',
-                        'cultural'   => 'Cultural',
+                        'natural' => 'Natural',
+                        'cultural' => 'Cultural',
                     ]),
             ])
             ->defaultSort('total_physical_visits', 'desc')
@@ -250,16 +254,16 @@ class Reports extends Page implements HasTable
         $hasActivity = $topRow && (((int) $topRow->total_physical_visits) > 0 || ((int) $topRow->viewed_in_ar) > 0);
 
         return [
-            'period_label'          => $periodLabel,
+            'period_label' => $periodLabel,
             'total_physical_visits' => $totalPhysicalVisits,
             'today_physical_visits' => $todayPhysicalVisits,
-            'unique_visitors'       => $uniqueVisitors,
-            'unique_physical_only'  => $uniquePhysicalVisitors,
-            'total_ar_views'        => $totalArViews,
-            'today_ar_views'        => $todayArViews,
-            'most_visited_site'     => $hasActivity ? $topRow->name : ' ',
+            'unique_visitors' => $uniqueVisitors,
+            'unique_physical_only' => $uniquePhysicalVisitors,
+            'total_ar_views' => $totalArViews,
+            'today_ar_views' => $todayArViews,
+            'most_visited_site' => $hasActivity ? $topRow->name : ' ',
             'most_visited_physical' => $hasActivity ? (int) $topRow->total_physical_visits : 0,
-            'most_visited_ar'       => $hasActivity ? (int) $topRow->viewed_in_ar : 0,
+            'most_visited_ar' => $hasActivity ? (int) $topRow->viewed_in_ar : 0,
         ];
     }
 
@@ -268,49 +272,65 @@ class Reports extends Page implements HasTable
      */
     public function exportCsv(): StreamedResponse
     {
-        [, , $periodLabel] = $this->getResolvedDateRange();
-        $rows = $this->getFilteredSortedTableQuery()->get();
-        $filename = 'daanar-landmark-analytics-' . now()->format('Y-m-d_His') . '.csv';
+        $report = $this->getExportReport();
+        $filename = 'daanar-landmark-analytics-'.now()->format('Y-m-d_His').'.csv';
 
-        return response()->streamDownload(function () use ($rows, $periodLabel) {
+        return response()->streamDownload(function () use ($report) {
             $out = fopen('php://output', 'w');
-            // UTF-8 BOM for Excel compatibility
-            fwrite($out, "\xEF\xBB\xBF");
-
-            fputcsv($out, ['DaanAR Landmark Visit Analytics Report']);
-            fputcsv($out, ['Date Period', $periodLabel, 'Generated At', now()->format('Y-m-d H:i:s')]);
-            fputcsv($out, []);
-            fputcsv($out, [
-                'Landmark',
-                'Municipality',
-                'Category',
-                'Total Visits (On-Site)',
-                'Unique Visitors',
-                'Viewed in AR',
-                'Unique AR Viewers',
-                'Map Navigations',
-                'Last Activity',
-            ]);
-
-            foreach ($rows as $row) {
-                fputcsv($out, [
-                    $row->name,
-                    $row->municipality?->name ?? 'Pangasinan',
-                    ucfirst((string) $row->category),
-                    (int) $row->total_physical_visits,
-                    (int) $row->unique_visitors,
-                    (int) $row->viewed_in_ar,
-                    (int) $row->unique_ar_viewers,
-                    (int) $row->map_navigations,
-                    $row->last_visited_at
-                        ? Carbon::parse($row->last_visited_at)->format('Y-m-d H:i:s')
-                        : 'No activity yet',
-                ]);
+            try {
+                app(LandmarkReportExport::class)->writeCsv($out, $report);
+            } finally {
+                fclose($out);
             }
-
-            fclose($out);
         }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'private, no-store',
         ]);
+    }
+
+    public function exportExcel(): BinaryFileResponse
+    {
+        $report = $this->getExportReport();
+        $path = tempnam(sys_get_temp_dir(), 'daanar-report-');
+        if ($path === false) {
+            throw new \RuntimeException('Could not prepare the Excel report.');
+        }
+        try {
+            app(LandmarkReportExport::class)->writeExcel($path, $report);
+
+            return response()->download($path, 'daanar-landmark-analytics-'.now()->format('Y-m-d_His').'.xlsx', [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Cache-Control' => 'private, no-store',
+            ])->deleteFileAfterSend(true);
+        } catch (\Throwable $error) {
+            @unlink($path);
+            throw $error;
+        }
+    }
+
+    public function printReport(): string
+    {
+        return view('filament.reports.landmark-print', ['report' => $this->getExportReport()])->render();
+    }
+
+    protected function getExportReport(): array
+    {
+        abort_unless(auth()->user()?->canAccessPanel(Filament::getCurrentPanel()), 403);
+        [, , $period] = $this->getResolvedDateRange();
+        $municipality = $this->tableFilters['municipality_id']['value'] ?? null;
+        $category = $this->tableFilters['category']['value'] ?? null;
+        $filters = [
+            'Municipality: '.($municipality
+                ? (Municipality::find($municipality)?->name ?? 'Unknown') : 'All'),
+            'Category: '.($category ? ucfirst($category) : 'All'),
+        ];
+        if (filled($this->tableSearch)) {
+            $filters[] = 'Search: '.$this->tableSearch;
+        }
+
+        // Same filtered and sorted query as the table, without pagination.
+        return app(LandmarkReportExport::class)->data(
+            $this->getFilteredSortedTableQuery()->get(), $period, implode(' | ', $filters),
+        );
     }
 }
