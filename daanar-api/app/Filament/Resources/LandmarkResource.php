@@ -121,12 +121,6 @@ class LandmarkResource extends Resource
                             ->directory('landmarks/hero')
                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
                             ->maxSize(307200),
-                        Forms\Components\FileUpload::make('ar_marker_image')
-                            ->label('AR Marker Image')
-                            ->disk('public')
-                            ->directory('landmarks/markers')
-                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
-                            ->maxSize(307200),
                         Forms\Components\FileUpload::make('ar_model_url')
                             ->label('AR 3D Model')
                             ->disk('public')
@@ -137,10 +131,6 @@ class LandmarkResource extends Resource
                                 'application/octet-stream',
                             ])
                             ->maxSize(307200),
-                        Forms\Components\TextInput::make('ar_html_path')
-                            ->label('AR HTML Path')
-                            ->maxLength(255)
-                            ->placeholder('/ar/landmark/{id}'),
                         Forms\Components\Toggle::make('is_featured')
                             ->label('Featured Landmark')
                             ->default(false),
