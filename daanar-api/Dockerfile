@@ -71,5 +71,7 @@ CMD mkdir -p storage/app/public storage/logs storage/framework/cache/data \
         storage/framework/sessions storage/framework/views \
     && find storage -xdev \( ! -user www-data -o ! -group www-data \) \
         -exec chown -h www-data:www-data {} + \
+    && a2dismod mpm_event mpm_worker \
+    && a2enmod mpm_prefork \
     && runuser -u www-data -- php artisan migrate --force \
     && exec apache2-foreground
