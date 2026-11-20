@@ -1,12 +1,10 @@
 # =============================================================================
 # DaanAR Laravel API Railway Dockerfile
 # =============================================================================
-# Uses the official PHP 8.4 CLI image with all required extensions installed,
-# because Railway's Nixpacks/FrankenPHP builder does NOT load gd, intl, bcmath,
-# or zip even when declared in nixpacks.toml.
+# Runs Laravel behind Apache with the extensions required by the CMS.
 # =============================================================================
 
-FROM php:8.4-cli
+FROM php:8.4-apache
 
 # Install system dependencies for PHP extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -55,23 +53,23 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-script
 # Copy the rest of the application
 COPY . .
 
-# Run post-install scripts (package discovery, filament upgrade)
-RUN composer run-script post-autoload-dump --no-interaction 2>/dev/null || true
+ENV PORT=8080
+COPY docker/daanar.conf /etc/apache2/sites-available/000-default.conf
+RUN mkdir -p storage/app/public storage/logs storage/framework/cache/data \
+        storage/framework/sessions storage/framework/views bootstrap/cache \
+    && composer run-script post-autoload-dump --no-interaction \
+    && php artisan storage:link \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && a2enmod rewrite \
+    && printf '%s\n' 'Listen ${PORT}' > /etc/apache2/ports.conf \
+    && apache2ctl -t
 
-# Create storage link and set permissions
-RUN php artisan storage:link 2>/dev/null || true \
-    && chmod -R 775 storage bootstrap/cache \
-    && mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views
-
-# Expose port
 EXPOSE 8080
 
-# Start command: clear caches, run migrations, seed, then serve
-CMD php artisan route:clear && \
-    php artisan config:clear && \
-    php artisan view:clear && \
-    php artisan migrate --force && \
-    php artisan db:seed --force && \
-    php artisan admin:reset-password && \
-    php artisan storage:link 2>/dev/null; \
-    php artisan serve --host 0.0.0.0 --port 8080
+# The mounted storage directory replaces the directory prepared at build time.
+CMD mkdir -p storage/app/public storage/logs storage/framework/cache/data \
+        storage/framework/sessions storage/framework/views \
+    && find storage -xdev \( ! -user www-data -o ! -group www-data \) \
+        -exec chown -h www-data:www-data {} + \
+    && runuser -u www-data -- php artisan migrate --force \
+    && exec apache2-foreground

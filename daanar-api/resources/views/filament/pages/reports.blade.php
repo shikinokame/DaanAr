@@ -150,12 +150,12 @@
                 </div>
                 <div>
                     <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                        Unique Visitors
+                        Unique On-Site Visitors
                     </p>
                     <p class="text-2xl font-bold text-gray-900 dark:text-white">
                         {{ number_format($stats['unique_visitors']) }}
                     </p>
-                    <p class="text-xs text-gray-400">Distinct registered mobile users</p>
+                    <p class="text-xs text-gray-400">Distinct visitors with a recorded on-site visit</p>
                 </div>
             </div>
         </div>
@@ -173,7 +173,9 @@
                     <p class="text-2xl font-bold text-gray-900 dark:text-white">
                         {{ number_format($stats['total_ar_views']) }}
                     </p>
-                    <p class="text-xs text-gray-400">Virtual 3D / AR model inspections</p>
+                    <p class="text-xs text-gray-400">
+                        {{ number_format($stats['unique_ar_viewers']) }} unique AR viewers
+                    </p>
                 </div>
             </div>
         </div>

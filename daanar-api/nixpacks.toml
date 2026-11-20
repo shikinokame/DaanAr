@@ -29,4 +29,4 @@ cmds = [
 ]
 
 [start]
-cmd = "php artisan route:clear ; php artisan config:clear ; php artisan view:clear ; php artisan migrate --force ; php artisan db:seed --force ; php artisan admin:reset-password ; php artisan storage:link ; php -d extension=gd -d extension=intl -d extension=bcmath -d extension=zip -d upload_max_filesize=350M -d post_max_size=350M -d memory_limit=1024M -d max_execution_time=600 artisan serve --host 0.0.0.0 --port 8080"
+cmd = 'php artisan migrate --force && exec php -d extension=gd -d extension=intl -d extension=bcmath -d extension=zip -d upload_max_filesize=350M -d post_max_size=350M -d memory_limit=1024M -d max_execution_time=600 artisan serve --host 0.0.0.0 --port "${PORT:-8080}"'

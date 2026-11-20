@@ -88,26 +88,29 @@ class Reports extends Page implements HasTable
     {
         [$start, $end] = $this->getResolvedDateRange();
 
+        $visitsByLandmark = LandmarkVisit::query()
+            ->select('landmark_id')
+            ->selectRaw("COUNT(CASE WHEN action_type = 'PHYSICAL_VISIT' THEN 1 END) as total_physical_visits")
+            ->selectRaw("COUNT(DISTINCT CASE WHEN action_type = 'PHYSICAL_VISIT' THEN COALESCE(CAST(user_id AS CHAR), device_id) END) as unique_visitors")
+            ->selectRaw("COUNT(CASE WHEN action_type = 'AR_VIEW' THEN 1 END) as viewed_in_ar")
+            ->selectRaw("COUNT(DISTINCT CASE WHEN action_type = 'AR_VIEW' THEN COALESCE(CAST(user_id AS CHAR), device_id) END) as unique_ar_viewers")
+            ->selectRaw("COUNT(CASE WHEN action_type = 'MAP_NAV' THEN 1 END) as map_navigations")
+            ->selectRaw('MAX(COALESCE(visited_at, created_at)) as last_visited_at')
+            ->when($start, fn ($query) => $query->where('created_at', '>=', $start))
+            ->when($end, fn ($query) => $query->where('created_at', '<=', $end))
+            ->groupBy('landmark_id');
+
         return Landmark::query()
             ->select([
                 'landmarks.*',
-                DB::raw("COUNT(CASE WHEN landmark_visits.action_type = 'PHYSICAL_VISIT' THEN 1 END) as total_physical_visits"),
-                DB::raw("COUNT(DISTINCT CASE WHEN landmark_visits.action_type = 'PHYSICAL_VISIT' THEN COALESCE(CAST(landmark_visits.user_id AS CHAR), landmark_visits.device_id) END) as unique_visitors"),
-                DB::raw("COUNT(CASE WHEN landmark_visits.action_type = 'AR_VIEW' THEN 1 END) as viewed_in_ar"),
-                DB::raw("COUNT(DISTINCT CASE WHEN landmark_visits.action_type = 'AR_VIEW' THEN COALESCE(CAST(landmark_visits.user_id AS CHAR), landmark_visits.device_id) END) as unique_ar_viewers"),
-                DB::raw("COUNT(CASE WHEN landmark_visits.action_type = 'MAP_NAV' THEN 1 END) as map_navigations"),
-                DB::raw('MAX(COALESCE(landmark_visits.visited_at, landmark_visits.created_at)) as last_visited_at'),
+                DB::raw('COALESCE(visit_totals.total_physical_visits, 0) as total_physical_visits'),
+                DB::raw('COALESCE(visit_totals.unique_visitors, 0) as unique_visitors'),
+                DB::raw('COALESCE(visit_totals.viewed_in_ar, 0) as viewed_in_ar'),
+                DB::raw('COALESCE(visit_totals.unique_ar_viewers, 0) as unique_ar_viewers'),
+                DB::raw('COALESCE(visit_totals.map_navigations, 0) as map_navigations'),
+                'visit_totals.last_visited_at',
             ])
-            ->leftJoin('landmark_visits', function ($join) use ($start, $end) {
-                $join->on('landmarks.id', '=', 'landmark_visits.landmark_id');
-                if ($start) {
-                    $join->where('landmark_visits.created_at', '>=', $start);
-                }
-                if ($end) {
-                    $join->where('landmark_visits.created_at', '<=', $end);
-                }
-            })
-            ->groupBy('landmarks.id')
+            ->leftJoinSub($visitsByLandmark, 'visit_totals', 'visit_totals.landmark_id', '=', 'landmarks.id')
             ->with('municipality');
     }
 
@@ -204,49 +207,28 @@ class Reports extends Page implements HasTable
     {
         [$start, $end, $periodLabel] = $this->getResolvedDateRange();
 
-        $applyDate = function ($q) use ($start, $end) {
-            if ($start) {
-                $q->where('created_at', '>=', $start);
-            }
-            if ($end) {
-                $q->where('created_at', '<=', $end);
-            }
-        };
-
-        $physicalQuery = LandmarkVisit::where('action_type', LandmarkVisit::ACTION_PHYSICAL_VISIT);
-        $applyDate($physicalQuery);
-        $totalPhysicalVisits = (clone $physicalQuery)->count();
-
-        $todayPhysicalVisits = LandmarkVisit::where('action_type', LandmarkVisit::ACTION_PHYSICAL_VISIT)
-            ->whereDate('created_at', today())
-            ->count();
-
-        // Unique Visitors: COUNT(DISTINCT user_id) across visits in the active period
-        // Falls back to distinct COALESCE(user_id, device_id) so legacy logs also count accurately
-        $uniquePhysicalVisitorsQuery = LandmarkVisit::where('action_type', LandmarkVisit::ACTION_PHYSICAL_VISIT);
-        $applyDate($uniquePhysicalVisitorsQuery);
-        $uniquePhysicalVisitors = (int) (clone $uniquePhysicalVisitorsQuery)
-            ->selectRaw('COUNT(DISTINCT COALESCE(CAST(user_id AS CHAR), device_id)) as aggregate')
-            ->value('aggregate');
-
-        $uniqueAllActiveQuery = LandmarkVisit::query();
-        $applyDate($uniqueAllActiveQuery);
-        $uniqueAllActive = (int) (clone $uniqueAllActiveQuery)
-            ->selectRaw('COUNT(DISTINCT COALESCE(CAST(user_id AS CHAR), device_id)) as aggregate')
-            ->value('aggregate');
-
-        $uniqueVisitors = $uniquePhysicalVisitors > 0 ? $uniquePhysicalVisitors : $uniqueAllActive;
-
-        $arQuery = LandmarkVisit::where('action_type', LandmarkVisit::ACTION_AR_VIEW);
-        $applyDate($arQuery);
-        $totalArViews = (clone $arQuery)->count();
-
-        $todayArViews = LandmarkVisit::where('action_type', LandmarkVisit::ACTION_AR_VIEW)
-            ->whereDate('created_at', today())
-            ->count();
+        $totals = LandmarkVisit::query()
+            ->whereIn('action_type', [LandmarkVisit::ACTION_PHYSICAL_VISIT, LandmarkVisit::ACTION_AR_VIEW])
+            ->when($start, fn ($query) => $query->where('created_at', '>=', $start))
+            ->when($end, fn ($query) => $query->where('created_at', '<=', $end))
+            ->selectRaw('action_type, COUNT(*) as total, COUNT(DISTINCT COALESCE(CAST(user_id AS CHAR), device_id)) as unique_people')
+            ->groupBy('action_type')
+            ->get()
+            ->keyBy('action_type');
+        $today = today();
+        $todayCounts = LandmarkVisit::query()
+            ->whereIn('action_type', [LandmarkVisit::ACTION_PHYSICAL_VISIT, LandmarkVisit::ACTION_AR_VIEW])
+            ->where('created_at', '>=', $today)
+            ->where('created_at', '<', $today->copy()->addDay())
+            ->selectRaw('action_type, COUNT(*) as total')
+            ->groupBy('action_type')
+            ->pluck('total', 'action_type');
+        $physical = $totals->get(LandmarkVisit::ACTION_PHYSICAL_VISIT);
+        $ar = $totals->get(LandmarkVisit::ACTION_AR_VIEW);
 
         // Most Visited Site in selected period (by on-site physical visits first, then AR views)
         $topRow = $this->buildAnalyticsQuery()
+            ->without('municipality')
             ->orderByDesc('total_physical_visits')
             ->orderByDesc('viewed_in_ar')
             ->first();
@@ -255,12 +237,12 @@ class Reports extends Page implements HasTable
 
         return [
             'period_label' => $periodLabel,
-            'total_physical_visits' => $totalPhysicalVisits,
-            'today_physical_visits' => $todayPhysicalVisits,
-            'unique_visitors' => $uniqueVisitors,
-            'unique_physical_only' => $uniquePhysicalVisitors,
-            'total_ar_views' => $totalArViews,
-            'today_ar_views' => $todayArViews,
+            'total_physical_visits' => (int) ($physical?->total ?? 0),
+            'today_physical_visits' => (int) ($todayCounts[LandmarkVisit::ACTION_PHYSICAL_VISIT] ?? 0),
+            'unique_visitors' => (int) ($physical?->unique_people ?? 0),
+            'unique_ar_viewers' => (int) ($ar?->unique_people ?? 0),
+            'total_ar_views' => (int) ($ar?->total ?? 0),
+            'today_ar_views' => (int) ($todayCounts[LandmarkVisit::ACTION_AR_VIEW] ?? 0),
             'most_visited_site' => $hasActivity ? $topRow->name : ' ',
             'most_visited_physical' => $hasActivity ? (int) $topRow->total_physical_visits : 0,
             'most_visited_ar' => $hasActivity ? (int) $topRow->viewed_in_ar : 0,

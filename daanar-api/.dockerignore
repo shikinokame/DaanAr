@@ -1,7 +1,8 @@
 vendor/
 node_modules/
-.env
-.env.backup
+.env*
+!.env.example
+public/storage
 storage/logs/*
 storage/framework/cache/*
 storage/framework/sessions/*

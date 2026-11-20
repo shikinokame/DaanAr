@@ -30,7 +30,7 @@ class LandmarkController extends Controller
             $query->where('category', $request->string('category'));
         }
 
-        $landmarks = $query->orderBy('name')->paginate(15)->withQueryString();
+        $landmarks = $query->orderBy('name')->orderBy('id')->paginate(15)->withQueryString();
 
         return LandmarkResource::collection($landmarks);
     }

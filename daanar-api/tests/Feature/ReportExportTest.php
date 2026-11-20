@@ -106,6 +106,18 @@ class ReportExportTest extends TestCase
         $this->assertStringContainsString('No landmarks match the selected filters.', $html);
     }
 
+    public function test_virtual_activity_does_not_count_as_an_on_site_visitor(): void
+    {
+        DB::table('landmark_visits')->where('action_type', 'PHYSICAL_VISIT')->delete();
+
+        $stats = Livewire::test(Reports::class)->instance()->getStatsData();
+
+        $this->assertSame(0, $stats['total_physical_visits']);
+        $this->assertSame(0, $stats['unique_visitors']);
+        $this->assertSame(1, $stats['total_ar_views']);
+        $this->assertSame(1, $stats['unique_ar_viewers']);
+    }
+
     public function test_excel_is_a_styled_workbook_with_all_rows_and_numeric_counts(): void
     {
         $response = Livewire::test(Reports::class)->instance()->exportExcel();
