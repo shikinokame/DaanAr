@@ -25,8 +25,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         RateLimiter::for('google-routes', function (Request $request) {
+            $userKey = $request->user()?->id ?? $request->header('X-User-Phone') ?? $request->ip();
             return [
-                Limit::perMinute(12)->by('routes-user:'.$request->user()->id),
+                Limit::perMinute(12)->by('routes-user:'.$userKey),
                 Limit::perMinute(40)->by('routes-ip:'.$request->ip()),
                 Limit::perDay(max(1, config('services.google_routes.daily_request_limit')))->by('routes-total'),
             ];

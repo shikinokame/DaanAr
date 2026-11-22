@@ -204,7 +204,7 @@ class AuthService {
     }
 
     try {
-      await _dio.get(
+      final response = await _dio.get(
         '/auth/me',
         queryParameters: {
           'phone_number': phone,
@@ -215,6 +215,14 @@ class AuthService {
           receiveTimeout: const Duration(seconds: 5),
         ),
       );
+      final body = response.data;
+      if (body is Map<String, dynamic>) {
+        final data = (body['data'] as Map<String, dynamic>?) ?? body;
+        final freshToken = data['token'] as String?;
+        if (freshToken != null && freshToken.isNotEmpty) {
+          await TokenStorage.saveToken(freshToken);
+        }
+      }
       return 'active';
     } on DioException catch (e) {
       final code = e.response?.statusCode;

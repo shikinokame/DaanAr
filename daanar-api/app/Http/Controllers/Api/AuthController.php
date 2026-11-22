@@ -270,7 +270,8 @@ class AuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user('sanctum');
+        $sanctumUser = $request->user('sanctum');
+        $user = $sanctumUser;
 
         if (! $user) {
             $rawPhone = $request->query('phone_number') ?? $request->header('X-User-Phone');
@@ -303,10 +304,13 @@ class AuthController extends Controller
             ], 403);
         }
 
+        $freshToken = $sanctumUser ? null : $user->createToken('mobile-token')->plainTextToken;
+
         return response()->json([
             'data' => [
                 'user_id' => $user->id,
                 'status'  => $user->status ?? 'Active',
+                'token'   => $freshToken,
                 'user'    => [
                     'id'           => $user->id,
                     'user_id'      => $user->id,

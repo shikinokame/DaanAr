@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../core/api_client.dart';
+import '../core/token_storage.dart';
 import '../models/route_result.dart';
 import '../models/transport_mode.dart';
 
@@ -8,30 +9,65 @@ import '../models/transport_mode.dart';
 class RoutingService {
   static final _dio = ApiClient().dio;
 
+  static Future<bool> _tryRefreshSessionToken() async {
+    final phone = await TokenStorage.getPhoneNumber();
+    if (phone == null || phone.isEmpty) return false;
+    final role = (await TokenStorage.getUserRole()) ?? 'Normal User';
+    try {
+      final res = await _dio.post(
+        '/auth/register-mobile',
+        data: {
+          'phone_number': phone,
+          'user_role': role,
+        },
+      );
+      final body = res.data as Map<String, dynamic>;
+      final data = (body['data'] as Map<String, dynamic>?) ?? body;
+      final token = data['token'] as String?;
+      if (token != null && token.isNotEmpty) {
+        await TokenStorage.saveToken(token);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
   static Future<RouteResult> getRoute({
     required LatLng origin,
     required LatLng destination,
     TransportMode mode = TransportMode.walking,
   }) async {
+    final payload = {
+      'origin': {
+        'latitude': origin.latitude,
+        'longitude': origin.longitude,
+      },
+      'destination': {
+        'latitude': destination.latitude,
+        'longitude': destination.longitude,
+      },
+      'travel_mode': mode.googleTravelMode,
+    };
     try {
       final response = await _dio.post(
         '/routes/compute',
-        data: {
-          'origin': {
-            'latitude': origin.latitude,
-            'longitude': origin.longitude,
-          },
-          'destination': {
-            'latitude': destination.latitude,
-            'longitude': destination.longitude,
-          },
-          'travel_mode': mode.googleTravelMode,
-        },
+        data: payload,
         options: Options(receiveTimeout: const Duration(seconds: 22)),
       );
       return parseGoogleResponse(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
+        final refreshed = await _tryRefreshSessionToken();
+        if (refreshed) {
+          try {
+            final retryResp = await _dio.post(
+              '/routes/compute',
+              data: payload,
+              options: Options(receiveTimeout: const Duration(seconds: 22)),
+            );
+            return parseGoogleResponse(retryResp.data as Map<String, dynamic>);
+          } catch (_) {}
+        }
         throw const RoutingException(
           'Sign in again while online to use Google directions.',
         );
