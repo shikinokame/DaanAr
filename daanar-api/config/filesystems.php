@@ -36,6 +36,14 @@ return [
             'throw' => false,
         ],
 
+        'livewire-temporary' => [
+            'driver' => 'local',
+            'root' => sys_get_temp_dir().DIRECTORY_SEPARATOR.'daanar-livewire',
+            'visibility' => 'private',
+            'directory_visibility' => 'private',
+            'throw' => true,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

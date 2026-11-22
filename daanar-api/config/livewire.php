@@ -64,7 +64,7 @@ return [
     */
 
     'temporary_file_upload' => [
-        'disk' => null,        // Example: 'local', 's3'              | Default: 'default'
+        'disk' => 'livewire-temporary', // Keep staged uploads outside the public media volume.
         'rules' => ['required', 'file', 'max:307200'], // 300MB limit (307200 KB)
         'directory' => null,   // Example: 'tmp'                      | Default: 'livewire-tmp'
         'middleware' => null,  // Example: 'throttle:5,1'             | Default: 'throttle:60,1'

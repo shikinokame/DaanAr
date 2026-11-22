@@ -69,6 +69,7 @@ EXPOSE 8080
 # The mounted storage directory replaces the directory prepared at build time.
 CMD mkdir -p storage/app/public storage/logs storage/framework/cache/data \
         storage/framework/sessions storage/framework/views \
+    && install -d -o www-data -g www-data -m 0700 /tmp/daanar-livewire \
     && find storage -xdev \( ! -user www-data -o ! -group www-data \) \
         -exec chown -h www-data:www-data {} + \
     && a2dismod mpm_event mpm_worker \
