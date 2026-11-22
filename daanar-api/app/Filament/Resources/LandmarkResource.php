@@ -74,6 +74,7 @@ class LandmarkResource extends Resource
                             ->columnSpanFull(),
                         Forms\Components\Textarea::make('short_description')
                             ->required()
+                            ->maxLength(255)
                             ->rows(2)
                             ->columnSpanFull(),
                         Forms\Components\Textarea::make('description')
