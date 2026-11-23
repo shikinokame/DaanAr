@@ -62,7 +62,7 @@ class _FieldHistoryScreenState extends ConsumerState<FieldHistoryScreen> {
           side: const BorderSide(color: AppColors.rule),
         ),
         title: Text(
-          'Clear Field History',
+          'Clear Heritage Passport',
           style: AppText.cardTitle.copyWith(fontSize: 22),
         ),
         content: const Text(
@@ -104,8 +104,13 @@ class _FieldHistoryScreenState extends ConsumerState<FieldHistoryScreen> {
     }
   }
 
-  int get _placesVisitedCount =>
-      _entries.where((e) => e.type == HistoryEntryType.visit).length;
+  int get _placesVisitedCount => _entries
+      .where(
+        (entry) => entry.type == HistoryEntryType.visit && entry.landmarkId > 0,
+      )
+      .map((entry) => entry.landmarkId)
+      .toSet()
+      .length;
 
   int get _arViewsCount =>
       _entries.where((e) => e.type == HistoryEntryType.ar).length;
@@ -123,6 +128,8 @@ class _FieldHistoryScreenState extends ConsumerState<FieldHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final catalog = ref.watch(landmarkListProvider);
+    final visits = _placesVisitedCount;
     // Enrich history thumbnails automatically once landmarks finish loading
     ref.listen<AsyncValue<LandmarkResult>>(landmarkListProvider, (prev, next) {
       final list = next.valueOrNull?.landmarks;
@@ -140,9 +147,15 @@ class _FieldHistoryScreenState extends ConsumerState<FieldHistoryScreen> {
         child: CustomScrollView(
           slivers: [
             // Archival Header + Overlapping Stats Card
-            SliverToBoxAdapter(
-              child: _buildHeaderWithLedger(context),
-            ),
+            SliverToBoxAdapter(child: _buildHeaderWithLedger(context, visits)),
+
+            if (!_loading)
+              SliverToBoxAdapter(
+                child: _buildCollectionProgress(
+                  visits,
+                  catalog.valueOrNull?.catalogTotal,
+                ),
+              ),
 
             // Segmented Filter Bar + CLEAR Action
             SliverToBoxAdapter(
@@ -206,7 +219,7 @@ class _FieldHistoryScreenState extends ConsumerState<FieldHistoryScreen> {
     );
   }
 
-  Widget _buildHeaderWithLedger(BuildContext context) {
+  Widget _buildHeaderWithLedger(BuildContext context, int visits) {
     final topPad = MediaQuery.of(context).padding.top;
 
     return Stack(
@@ -239,22 +252,18 @@ class _FieldHistoryScreenState extends ConsumerState<FieldHistoryScreen> {
               ),
               child: Column(
                 children: [
-                  Text(
-                    'YOUR PERSONAL ARCHIVE',
-                    textAlign: TextAlign.center,
-                    style: AppText.eyebrow.copyWith(
-                      color: AppColors.brass,
-                      fontSize: 10.5,
-                      letterSpacing: 2.3,
-                    ),
+                  const Icon(
+                    Icons.history_edu_outlined,
+                    color: AppColors.brass,
+                    size: 28,
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Field History',
+                    'Heritage Passport',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: AppFonts.serif,
-                      fontSize: 38,
+                      fontSize: 36,
                       fontWeight: FontWeight.w600,
                       color: AppColors.surface,
                       height: 1.05,
@@ -299,7 +308,7 @@ class _FieldHistoryScreenState extends ConsumerState<FieldHistoryScreen> {
               children: [
                 Expanded(
                   child: _buildStatColumn(
-                    value: '$_placesVisitedCount',
+                    value: '$visits',
                     label: 'PLACES VISITED',
                   ),
                 ),
@@ -330,6 +339,43 @@ class _FieldHistoryScreenState extends ConsumerState<FieldHistoryScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCollectionProgress(int visits, int? catalogTotal) {
+    final total =
+        catalogTotal != null && catalogTotal > 0 && visits <= catalogTotal
+        ? catalogTotal
+        : null;
+    final label = total == null
+        ? '$visits Pangasinan landmarks visited'
+        : '$visits of $total Pangasinan landmarks visited';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.rule),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppText.eyebrow.copyWith(letterSpacing: 0.3)),
+          if (total != null) ...[
+            const SizedBox(height: 8),
+            ExcludeSemantics(
+              child: LinearProgressIndicator(
+                value: visits / total,
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(3),
+                backgroundColor: AppColors.paperDeep,
+                color: AppColors.brassInk,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -466,13 +512,13 @@ class _FieldHistoryScreenState extends ConsumerState<FieldHistoryScreen> {
       case _HistoryFilter.visits:
         emptyTitle = 'No Visited Places Yet';
         emptySubtitle =
-            'Explore heritage landmarks across Pangasinan to build your personal field history.';
+            'Visit heritage landmarks across Pangasinan to collect passport stamps.';
       case _HistoryFilter.arViewed:
         emptyTitle = 'No AR Views Recorded Yet';
         emptySubtitle =
             'Launch 3D reconstructions and AR experiences on landmark pages to log them here.';
       case _HistoryFilter.all:
-        emptyTitle = 'Your Field Archive is Empty';
+        emptyTitle = 'Your Heritage Passport is Empty';
         emptySubtitle =
             'Places you visit and 3D or AR reconstructions you inspect will appear here chronologically.';
     }
@@ -607,8 +653,8 @@ class _HistoryTimelineCard extends StatelessWidget {
             children: [
               // Thumbnail with top-left dark green icon badge
               SizedBox(
-                width: 82,
-                height: 82,
+                width: isAr ? 82 : 58,
+                height: isAr ? 82 : 58,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -706,6 +752,7 @@ class _HistoryTimelineCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (!isAr) ...[const SizedBox(width: 8), const _VisitPostmark()],
             ],
           ),
         ),
@@ -719,5 +766,57 @@ class _HistoryTimelineCard extends StatelessWidget {
     final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
     final minute = dt.minute.toString().padLeft(2, '0');
     return '$hour12:$minute $period';
+  }
+}
+
+class _VisitPostmark extends StatelessWidget {
+  const _VisitPostmark();
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: Transform.rotate(
+        angle: -0.16,
+        child: Container(
+          width: 56,
+          height: 56,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.ink, width: 1.4),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.ink),
+            ),
+            child: const FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.location_on_outlined,
+                    size: 17,
+                    color: AppColors.ink,
+                  ),
+                  Text(
+                    'VISITED',
+                    style: TextStyle(
+                      fontFamily: AppFonts.sans,
+                      color: AppColors.ink,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -6,7 +6,20 @@ class LocationService {
   ///
   /// Throws a [LocationException] with a user-readable message on any failure
   /// so callers can show a meaningful error instead of a raw exception.
-  static Future<Position> getCurrentPosition() async {
+  static Future<Position> getCurrentPosition({
+    bool requestPermission = true,
+  }) async {
+    await ensurePermission(requestPermission: requestPermission);
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 15),
+      ),
+    );
+  }
+
+  /// Checks location access without waiting for a GPS fix.
+  static Future<void> ensurePermission({bool requestPermission = true}) async {
     // 1. Check if location services are enabled on the device
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -18,14 +31,14 @@ class LocationService {
 
     // 2. Check / request permission
     var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
+    if (permission == LocationPermission.denied && requestPermission) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        throw LocationException(
-          'Location permission was denied. Please allow location access to use navigation.',
-          LocationExceptionType.permissionDenied,
-        );
-      }
+    }
+    if (permission == LocationPermission.denied) {
+      throw LocationException(
+        'Location permission was denied. Please allow location access to use navigation.',
+        LocationExceptionType.permissionDenied,
+      );
     }
     if (permission == LocationPermission.deniedForever) {
       throw LocationException(
@@ -33,18 +46,10 @@ class LocationService {
         LocationExceptionType.permissionPermanentlyDenied,
       );
     }
-
-    // 3. Fetch position (high accuracy, 15s timeout)
-    return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 15),
-      ),
-    );
   }
 
   /// Returns a continuous stream of GPS positions for live navigation.
-  /// Only starts after permission is confirmed call [getCurrentPosition] first.
+  /// Only starts after permission is confirmed via [ensurePermission].
   static Stream<Position> getPositionStream() {
     return Geolocator.getPositionStream(
       locationSettings: const LocationSettings(

@@ -8,7 +8,8 @@ import '../services/notification_service.dart';
 import '../services/location_service.dart';
 
 /// Radius in metres a physical visit is triggered when the user enters this 100m zone.
-const double kGeofenceRadiusMetres = AppConstants.physicalVisitRadiusMetres; // 100.0m
+const double kGeofenceRadiusMetres =
+    AppConstants.physicalVisitRadiusMetres; // 100.0m
 
 /// Minimum seconds between repeated notifications/logs for the same landmark.
 const int kCooldownSeconds = 300; // 5 minutes
@@ -26,38 +27,27 @@ class GeofenceService {
   /// Tracks which landmark IDs have been recently notified/logged (cooldown).
   final Map<int, DateTime> _lastNotified = {};
 
-  /// Start listening. Call after location permission is granted.
-  Future<void> start(WidgetRef ref) async {
-    _landmarkService = ref.read(landmarkServiceProvider);
-
-    // Load all landmarks from the service (uses cache if offline)
-    try {
-      final result = await _landmarkService!.fetchAll();
-      _landmarks = (result['landmarks'] as List<Landmark>? ?? []);
-    } catch (_) {
-      _landmarks = [];
-    }
-
-    if (_landmarks.isEmpty) return;
-
-    // Perform an immediate check against current GPS fix if available
-    try {
-      final initialPos = await LocationService.getCurrentPosition();
-      _checkProximity(initialPos);
-    } catch (_) {}
-
-    // Listen to position updates (emits every 5+ metres moved)
-    _positionSub?.cancel();
+  /// Start listening using the same catalog displayed by the app.
+  void start(LandmarkService landmarkService) {
+    if (_positionSub != null) return;
+    _landmarkService = landmarkService;
     _positionSub = LocationService.getPositionStream().listen(
-      (position) => _checkProximity(position),
-      onError: (_) {}, // silently ignore GPS errors
+      _checkProximity,
+      onError: (_) {},
     );
+  }
+
+  void updateLandmarks(List<Landmark> landmarks) {
+    _landmarks = landmarks;
   }
 
   /// Stop the geofence listener (call on app suspend if needed).
   void stop() {
     _positionSub?.cancel();
     _positionSub = null;
+    _landmarkService = null;
+    _landmarks = [];
+    _lastNotified.clear();
   }
 
   void _checkProximity(Position position) {
@@ -96,10 +86,14 @@ class GeofenceService {
       userLng: position.longitude,
     );
 
-    NotificationService.instance.showArrivalNotification(
-      id: landmark.id,
-      landmarkName: landmark.name,
-      municipality: landmark.municipality?.name ?? 'Pangasinan',
+    unawaited(
+      NotificationService.instance
+          .showArrivalNotification(
+            id: landmark.id,
+            landmarkName: landmark.name,
+            municipality: landmark.municipality?.name ?? 'Pangasinan',
+          )
+          .catchError((Object _) {}),
     );
   }
 }

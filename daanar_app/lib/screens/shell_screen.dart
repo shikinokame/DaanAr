@@ -1,14 +1,65 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/theme.dart';
+import '../models/landmark.dart';
+import '../providers/landmark_providers.dart';
+import '../services/geofence_service.dart';
+import '../services/landmark_service.dart';
+import '../services/location_service.dart';
+import '../services/notification_service.dart';
 
 /// Bottom navigation shell wrapping Home, Explore (Trails & Landmarks), Map, and History tabs,
 /// styled after the Figma archival field-guide bottom bar.
-class ShellScreen extends StatelessWidget {
+class ShellScreen extends ConsumerStatefulWidget {
   final Widget child;
   const ShellScreen({super.key, required this.child});
 
+  @override
+  ConsumerState<ShellScreen> createState() => _ShellScreenState();
+}
+
+class _ShellScreenState extends ConsumerState<ShellScreen> {
   static const _tabs = ['/home', '/trails', '/map', '/history'];
+  bool _startingNearbyAlerts = false;
+  bool _trackingNearby = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.listenManual(landmarkListProvider, (_, next) {
+        if (next case AsyncData(:final value)) {
+          _updateNearbyLandmarks(value.landmarks);
+        }
+      }, fireImmediately: true);
+    });
+  }
+
+  Future<void> _updateNearbyLandmarks(List<Landmark> landmarks) async {
+    final geofence = GeofenceService.instance;
+    geofence.updateLandmarks(landmarks);
+    if (_trackingNearby || _startingNearbyAlerts || landmarks.isEmpty) return;
+    _startingNearbyAlerts = true;
+    try {
+      await LocationService.ensurePermission();
+      if (!mounted) return;
+      geofence.start(ref.read(landmarkServiceProvider));
+      _trackingNearby = true;
+      await NotificationService.instance.enableArrivalAlerts();
+    } catch (_) {
+      // Nearby alerts are optional when location or notifications are unavailable.
+    } finally {
+      _startingNearbyAlerts = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    GeofenceService.instance.stop();
+    super.dispose();
+  }
 
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
@@ -22,13 +73,11 @@ class ShellScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final index = _currentIndex(context);
     return Scaffold(
-      body: child,
+      body: widget.child,
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: AppColors.surface,
-          border: Border(
-            top: BorderSide(color: AppColors.rule, width: 1),
-          ),
+          border: Border(top: BorderSide(color: AppColors.rule, width: 1)),
         ),
         child: SafeArea(
           top: false,

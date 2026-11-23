@@ -14,11 +14,11 @@ class LandmarkMedia {
   });
 
   factory LandmarkMedia.fromJson(Map<String, dynamic> json) => LandmarkMedia(
-        heroImage: json['hero_image'] as String?,
-        arMarkerImage: json['ar_marker_image'] as String?,
-        arModelUrl: json['ar_model_url'] as String?,
-        arHtmlPath: json['ar_html_path'] as String?,
-      );
+    heroImage: json['hero_image'] as String?,
+    arMarkerImage: json['ar_marker_image'] as String?,
+    arModelUrl: json['ar_model_url'] as String?,
+    arHtmlPath: json['ar_html_path'] as String?,
+  );
 }
 
 class Landmark {
@@ -73,9 +73,15 @@ class Landmark {
     );
   }
 
-  /// Whether this landmark has an AR / 3D experience available.
-  bool get isArReady =>
-      (media.arModelUrl != null && media.arModelUrl!.isNotEmpty) ||
-      (media.arHtmlPath != null && media.arHtmlPath!.isNotEmpty) ||
-      id > 0;
+  // These landmarks have a bundled fallback in ArCoreLandmarkActivity.
+  static const _bundledLandmarkIds = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+  /// Whether the native 3D viewer has a remote model or a bundled fallback.
+  bool get isArReady {
+    if (_bundledLandmarkIds.contains(id)) return true;
+    final url = Uri.tryParse(media.arModelUrl?.trim() ?? '');
+    return url != null &&
+        (url.scheme == 'https' || url.scheme == 'http') &&
+        url.host.isNotEmpty;
+  }
 }

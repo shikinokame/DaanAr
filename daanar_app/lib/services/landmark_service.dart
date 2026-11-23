@@ -14,46 +14,51 @@ class LandmarkService {
   final Dio _dio;
   const LandmarkService(this._dio);
 
-  /// GET /api/v1/landmarks
-  /// On success: saves response to cache.
-  /// On network failure: loads from cache. Throws if no cache exists.
-  Future<Map<String, dynamic>> fetchAll({
-    String? municipality,
-    String? category,
-    int page = 1,
-  }) async {
+  /// Fetch the entire catalog before replacing the last usable offline snapshot.
+  Future<({List<Landmark> landmarks, bool fromCache, int? catalogTotal})>
+  fetchAll() async {
     try {
-      final response = await _dio.get(
-        '/landmarks',
-        queryParameters: {
-          'page': page,
-          'municipality': municipality,
-          'category': category,
-        }..removeWhere((_, v) => v == null),
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final items = (data['data'] as List<dynamic>)
-          .map((e) => Landmark.fromJson(e as Map<String, dynamic>))
-          .toList();
-
-      // Cache the raw JSON list for offline use (only for unfiltered, page 1)
-      if (municipality == null && category == null && page == 1) {
-        final rawList = (data['data'] as List<dynamic>)
-            .cast<Map<String, dynamic>>();
-        await CacheService.saveList(CacheService.keyLandmarks, rawList);
+      final recordsById = <int, Map<String, dynamic>>{};
+      var lastPage = 1;
+      int? total;
+      for (var page = 1; page <= lastPage; page++) {
+        final response = await _dio.get(
+          '/landmarks',
+          queryParameters: {'page': page},
+        );
+        final data = response.data as Map<String, dynamic>;
+        if (page == 1) {
+          final meta = data['meta'] as Map<String, dynamic>?;
+          lastPage = (meta?['last_page'] as num?)?.toInt() ?? 1;
+          total = (meta?['total'] as num?)?.toInt();
+        }
+        for (final record
+            in (data['data'] as List).cast<Map<String, dynamic>>()) {
+          recordsById[record['id'] as int] = record;
+        }
       }
-
-      return {'landmarks': items, 'meta': data['meta'] ?? {}, 'fromCache': false};
+      final records = recordsById.values.toList(growable: false);
+      final landmarks = records.map(Landmark.fromJson).toList(growable: false);
+      await CacheService.saveMap(CacheService.keyLandmarkCatalog, {
+        'records': records,
+        'total': total ?? landmarks.length,
+      });
+      return (
+        landmarks: landmarks,
+        fromCache: false,
+        catalogTotal: total ?? landmarks.length,
+      );
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) rethrow;
-      // Network failed try cache
-      final cached = await CacheService.loadList(CacheService.keyLandmarks);
-      if (cached != null) {
-        final items = cached.map(Landmark.fromJson).toList();
-        return {'landmarks': items, 'meta': {}, 'fromCache': true};
-      }
-      rethrow;
+      final cached = await CacheService.loadLandmarkCatalog();
+      if (cached == null) rethrow;
+      return (
+        landmarks: cached.records
+            .map(Landmark.fromJson)
+            .toList(growable: false),
+        fromCache: true,
+        catalogTotal: cached.total,
+      );
     }
   }
 
@@ -62,7 +67,8 @@ class LandmarkService {
     try {
       final response = await _dio.get('/landmarks/featured');
       final data = response.data as Map<String, dynamic>;
-      final rawList = (data['data'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final rawList = (data['data'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
 
       await CacheService.saveList(CacheService.keyFeaturedLandmarks, rawList);
 
@@ -72,9 +78,14 @@ class LandmarkService {
       );
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) rethrow;
-      final cached = await CacheService.loadList(CacheService.keyFeaturedLandmarks);
+      final cached = await CacheService.loadList(
+        CacheService.keyFeaturedLandmarks,
+      );
       if (cached != null) {
-        return (landmarks: cached.map(Landmark.fromJson).toList(), fromCache: true);
+        return (
+          landmarks: cached.map(Landmark.fromJson).toList(),
+          fromCache: true,
+        );
       }
       rethrow;
     }
@@ -92,7 +103,9 @@ class LandmarkService {
       return (landmark: Landmark.fromJson(raw), fromCache: false);
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) rethrow;
-      final cached = await CacheService.loadMap(CacheService.landmarkDetailKey(id));
+      final cached = await CacheService.loadMap(
+        CacheService.landmarkDetailKey(id),
+      );
       if (cached != null) {
         return (landmark: Landmark.fromJson(cached), fromCache: true);
       }
@@ -132,7 +145,8 @@ class LandmarkService {
         'userId': userId,
         'landmarkId': landmarkId,
         'actionType': actionType,
-        'verificationMethod': verificationMethod ??
+        'verificationMethod':
+            verificationMethod ??
             (actionType == 'PHYSICAL_VISIT' ? 'GPS_GEOFENCE' : 'REMOTE'),
         'userLat': ?userLat,
         'userLng': ?userLng,
@@ -153,8 +167,8 @@ class LandmarkService {
 
   /// Backwards-compatible alias for logging an AR view.
   Future<void> logVisit(int landmarkId) => logAnalyticsEvent(
-        landmarkId: landmarkId,
-        actionType: 'AR_VIEW',
-        verificationMethod: 'REMOTE',
-      );
+    landmarkId: landmarkId,
+    actionType: 'AR_VIEW',
+    verificationMethod: 'REMOTE',
+  );
 }

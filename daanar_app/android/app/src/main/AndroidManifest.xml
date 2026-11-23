@@ -48,6 +48,12 @@
             android:hardwareAccelerated="true"
             android:screenOrientation="portrait" />
         <!-- Google Maps API Key replace with your key from Google Cloud Console -->
+        <activity
+            android:name=".ArWalkingNavigationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:hardwareAccelerated="true"
+            android:screenOrientation="portrait" />
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDURcYtFVl4Q4WynSx9co2uCUEv_hExoig"/>

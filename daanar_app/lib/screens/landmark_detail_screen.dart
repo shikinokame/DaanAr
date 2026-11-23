@@ -4,7 +4,6 @@ import '../core/constants.dart';
 import '../core/theme.dart';
 import '../models/landmark.dart';
 import '../providers/landmark_providers.dart';
-import '../services/ar_service.dart';
 import '../services/landmark_service.dart';
 import '../services/location_service.dart';
 import '../widgets/archival.dart';
@@ -45,7 +44,8 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
     _physicalCheckDone = true;
 
     try {
-      final pos = await LocationService.getCurrentPosition();
+      final pos = await LocationService.getCurrentPosition(requestPermission: false);
+      if (!mounted) return;
       final distance = LocationService.distanceBetween(
         pos.latitude,
         pos.longitude,
@@ -68,57 +68,15 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
   }
 
   void _openArExperience(BuildContext context, Landmark landmark) {
-    if (ARService.hasAnyARAsset(landmark)) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ARViewScreen(
-            landmarkId: landmark.id,
-            landmarkName: landmark.name,
-            landmark: landmark,
-          ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ARViewScreen(
+          landmarkId: landmark.id,
+          landmarkName: landmark.name,
+          landmark: landmark,
         ),
-      );
-    } else {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(2),
-            side: const BorderSide(color: AppColors.rule),
-          ),
-          title: Text(
-            '3D & AR Field Guide',
-            style: AppText.cardTitle.copyWith(fontSize: 22),
-          ),
-          content: const Text(
-            'This landmark does not have custom 3D assets uploaded yet.\n\nWould you like to open the interactive 3D preview mode anyway?',
-            style: TextStyle(height: 1.5, color: AppColors.charcoal),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('CANCEL'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ARViewScreen(
-                      landmarkId: landmark.id,
-                      landmarkName: landmark.name,
-                      landmark: landmark,
-                    ),
-                  ),
-                );
-              },
-              child: const Text('OPEN 3D VIEW'),
-            ),
-          ],
-        ),
-      );
-    }
+      ),
+    );
   }
 
   @override
@@ -154,11 +112,12 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
               ),
             ),
             actions: [
-              IconButton(
-                tooltip: 'View in 3D & AR',
-                onPressed: () => _openArExperience(context, landmark),
-                icon: const Icon(Icons.view_in_ar_outlined, color: AppColors.brass),
-              ),
+              if (landmark.isArReady)
+                IconButton(
+                  tooltip: 'View in 3D & AR',
+                  onPressed: () => _openArExperience(context, landmark),
+                  icon: const Icon(Icons.view_in_ar_outlined, color: AppColors.brass),
+                ),
             ],
           ),
           body: PaperBackground(
@@ -278,12 +237,12 @@ class _LandmarkDetailScreenState extends ConsumerState<LandmarkDetailScreen> {
                         const OrnamentDivider(color: AppColors.brassInk, width: 120),
                         const SizedBox(height: 20),
 
-                        // Primary 3D & AR Launch Plate
-                        _ArLaunchPlate(
-                          onPressed: () => _openArExperience(context, landmark),
-                        ),
-
-                        const SizedBox(height: 24),
+                        if (landmark.isArReady) ...[
+                          _ArLaunchPlate(
+                            onPressed: () => _openArExperience(context, landmark),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
 
                         // Historical Narrative
                         Text('ARCHIVAL RECORD', style: AppText.eyebrow),

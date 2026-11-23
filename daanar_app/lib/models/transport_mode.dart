@@ -2,21 +2,24 @@ import 'package:flutter/material.dart';
 
 /// The mode of transport for route calculation.
 enum TransportMode {
-  walking,
   driving,
+  twoWheeler,
+  walking,
   cycling;
 
   /// Google Routes travel mode for this mode.
   String get googleTravelMode => switch (this) {
     TransportMode.walking => 'WALK',
     TransportMode.driving => 'DRIVE',
+    TransportMode.twoWheeler => 'TWO_WHEELER',
     TransportMode.cycling => 'BICYCLE',
   };
 
   /// Human-readable label.
   String get label => switch (this) {
     TransportMode.walking => 'Walk',
-    TransportMode.driving => 'Drive',
+    TransportMode.driving => 'Driving',
+    TransportMode.twoWheeler => 'Two-wheeler',
     TransportMode.cycling => 'Bicycle',
   };
 
@@ -24,6 +27,7 @@ enum TransportMode {
   IconData get icon => switch (this) {
     TransportMode.walking => Icons.directions_walk,
     TransportMode.driving => Icons.directions_car_rounded,
+    TransportMode.twoWheeler => Icons.two_wheeler,
     TransportMode.cycling => Icons.directions_bike,
   };
 
@@ -33,6 +37,8 @@ enum TransportMode {
   double get speedMetresPerSec => switch (this) {
     TransportMode.walking => 1.4, // ~5 km/h
     TransportMode.driving => 8.3, // ~30 km/h urban average
+    TransportMode.twoWheeler =>
+      8.3, // ~30 km/h urban estimate; Google supplies route ETA
     TransportMode.cycling => 4.2, // ~15 km/h
   };
 }

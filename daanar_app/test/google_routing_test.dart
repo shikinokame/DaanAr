@@ -107,11 +107,21 @@ void main() {
     );
   });
 
-  test('walking, driving and bicycle use different Google modes', () {
-    expect(TransportMode.walking.googleTravelMode, 'WALK');
-    expect(TransportMode.driving.googleTravelMode, 'DRIVE');
-    expect(TransportMode.cycling.googleTravelMode, 'BICYCLE');
-  });
+  test(
+    'walking, driving, motorcycle and bicycle use distinct Google modes',
+    () {
+      expect(TransportMode.walking.googleTravelMode, 'WALK');
+      expect(TransportMode.driving.googleTravelMode, 'DRIVE');
+      expect(TransportMode.twoWheeler.googleTravelMode, 'TWO_WHEELER');
+      expect(TransportMode.cycling.googleTravelMode, 'BICYCLE');
+      expect(TransportMode.values.map((m) => m.label), [
+        'Driving',
+        'Two-wheeler',
+        'Walk',
+        'Bicycle',
+      ]);
+    },
+  );
 
   test(
     'displayed remaining route starts at live projection and keeps the corner',

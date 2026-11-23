@@ -97,6 +97,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
     private lateinit var viewerStageContainer: FrameLayout
 
     // 3D Studio Preview View & Transform State
+    private var studioStage: StudioStage? = null
     private var studioSceneView: SceneView? = null
     private var studioModelNode: ModelNode? = null
     private var studioInitialScale: Float3 = Float3(1.0f, 1.0f, 1.0f)
@@ -179,6 +180,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
 
     private fun buildUi() {
         rootContainer = FrameLayout(this).apply {
+            fitsSystemWindows = true
             setBackgroundColor(Color.parseColor("#0B1812"))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -717,22 +719,44 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         studioPanX = 0f
         studioPanY = 0f
 
-        val sceneView = SceneView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+        val sceneView = SceneView(this, isOpaque = false)
+        // SceneView has made its EGL context current. The emulator's SwiftShader
+        // translator aborts the process compiling blitLow, even without post-processing.
+        val renderer = android.opengl.GLES20.glGetString(android.opengl.GLES20.GL_RENDERER).orEmpty()
+        if (renderer.contains("Emulator", ignoreCase = true) && renderer.contains("SwiftShader", ignoreCase = true)) {
+            sceneView.destroy()
+            Log.w(TAG, "3D Studio requires hardware graphics on this emulator")
+            android.app.AlertDialog.Builder(this)
+                .setTitle("3D preview unavailable")
+                .setMessage("This emulator uses software graphics. Use hardware graphics or open the landmark on a compatible phone.")
+                .setPositiveButton("Back to landmark") { _, _ -> finish() }
+                .setOnCancelListener { finish() }
+                .show()
+            return
+        }
+
+        val stage = StudioStage(this)
+        studioStage = stage
+        sceneView.apply {
+            // Keep SceneView attached for its lifecycle, and render into the composited texture.
+            visibility = View.GONE
+            uiHelper.attachTo(stage.renderView)
+            skybox = null
             // Natural neutral studio lighting (toned down slightly from SceneView's 30k/100k default)
             indirectLight?.intensity = 26_000f
             mainLightNode?.intensity = 65_000f
         }
-        viewerStageContainer.addView(sceneView)
         studioSceneView = sceneView
+        stage.addView(sceneView)
+        viewerStageContainer.addView(stage, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
 
         val modelInstance = sceneView.modelLoader.createModelInstance(ByteBuffer.wrap(glbBytes))
         val modelNode = ModelNode(
             modelInstance = modelInstance,
-            scaleToUnits = 1.75f,
+            scaleToUnits = 1.08f,
             centerOrigin = Float3(0.0f, 0.0f, 0.0f)
         )
         studioInitialScale = modelNode.scale
@@ -741,9 +765,10 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
 
         sceneView.cameraNode.position = Float3(0.0f, 0.35f, 2.55f)
         sceneView.cameraNode.lookAt(Float3(0.0f, 0.0f, 0.0f))
+        sceneView.onFrame = { stage.updateFloorShadow(sceneView.cameraNode, modelNode) }
         applyStudioTransform()
 
-        attachStudioTouchController(sceneView)
+        attachStudioTouchController(stage.renderView)
     }
 
     private fun applyStudioTransform() {
@@ -755,6 +780,7 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             studioInitialScale.y * studioZoomFactor,
             studioInitialScale.z * studioZoomFactor
         )
+        studioStage?.onModelTransformChanged()
     }
 
     private fun attachStudioTouchController(view: View) {
@@ -865,10 +891,12 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
         infoCard.visibility = View.GONE
         arControlsCard.visibility = View.VISIBLE
         setArTouchMode(moveFloor = true)
+        hintPillText.text = "Starting AR camera…"
 
         destroyStudioSceneView()
         destroyArSceneView()
 
+        var receivedCameraFrame = false
         val arView = ARSceneView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -895,6 +923,10 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             }
 
             onSessionUpdated = { _, frame ->
+                if (!receivedCameraFrame && frame.timestamp != 0L) {
+                    receivedCameraFrame = true
+                    setArTouchMode(moveFloor = arSingleFingerMovesFloor)
+                }
                 if (indirectLight == null) {
                     environment = SceneView.createEnvironment(environmentLoader, isOpaque = false)
                 }
@@ -920,9 +952,31 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
             }
         }
 
+        arView.onSessionFailed = { error ->
+            Log.w(TAG, "Unable to start the AR camera", error)
+            arView.post { recoverFromArStartup(arView) }
+        }
+
         attachArTouchController(arView)
         viewerStageContainer.addView(arView)
         arSceneView = arView
+        arView.postDelayed(object : Runnable {
+            override fun run() {
+                if (arSceneView !== arView || receivedCameraFrame || isFinishing || isDestroyed) return
+                if (!hasWindowFocus()) {
+                    arView.postDelayed(this, 12_000L)
+                    return
+                }
+                Log.w(TAG, "AR camera did not deliver a frame during startup")
+                recoverFromArStartup(arView)
+            }
+        }, 12_000L)
+    }
+
+    private fun recoverFromArStartup(arView: ARSceneView) {
+        if (arSceneView !== arView || isFinishing || isDestroyed) return
+        exitArModeToStudio()
+        Toast.makeText(this, "AR camera unavailable. Check Google Play Services for AR.", Toast.LENGTH_LONG).show()
     }
 
     /**
@@ -1214,8 +1268,13 @@ class ArCoreLandmarkActivity : AppCompatActivity() {
 
     private fun destroyStudioSceneView() {
         studioModelNode = null
+        studioStage?.let { stage ->
+            // Release the render surface while SceneView still owns its Filament engine.
+            stage.removeView(stage.renderView)
+            viewerStageContainer.removeView(stage)
+        }
+        studioStage = null
         studioSceneView?.let { view ->
-            viewerStageContainer.removeView(view)
             try {
                 view.destroy()
             } catch (_: Exception) {}

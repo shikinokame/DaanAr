@@ -2,7 +2,7 @@
 
 The app requests live Google Routes through `POST /api/v1/routes/compute`.
 The map, trail navigation and camera walking guide share this service. WALK,
-DRIVE and BICYCLE are explicit modes; there is no ORS/OSRM fallback. Existing
+DRIVE, TWO_WHEELER and BICYCLE are explicit modes; there is no ORS/OSRM fallback. Existing
 legacy trail segments are not used as walking directions. Google results are
 kept only in the current navigation session, not persisted to offline storage.
 

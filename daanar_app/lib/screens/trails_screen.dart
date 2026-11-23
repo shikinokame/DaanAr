@@ -76,7 +76,7 @@ class TrailsScreen extends ConsumerWidget {
                 trailsAsync.whenOrNull(data: (r) => r.fromCache) == true)
               OfflineBanner(
                 onRetry: () {
-                  ref.invalidate(filteredLandmarksProvider);
+                  ref.invalidate(landmarkListProvider);
                   ref.invalidate(municipalityListProvider);
                   ref.invalidate(trailListProvider);
                 },
@@ -85,7 +85,7 @@ class TrailsScreen extends ConsumerWidget {
               child: RefreshIndicator(
                 color: AppColors.primary,
                 onRefresh: () async {
-                  ref.invalidate(filteredLandmarksProvider);
+                  ref.invalidate(landmarkListProvider);
                   ref.invalidate(trailListProvider);
                 },
                 child: CustomScrollView(

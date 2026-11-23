@@ -9,8 +9,33 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var navigationResult: MethodChannel.Result? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val navigation = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ph.daanar/navigation")
+        ArNavigationBridge.requestWalkingRoute = { latitude, longitude, callback ->
+            navigation.invokeMethod("requestWalkingRoute", mapOf("latitude" to latitude, "longitude" to longitude), object : MethodChannel.Result {
+                override fun success(result: Any?) { callback(result as? Map<*, *>, null) }
+                override fun error(code: String, message: String?, details: Any?) { callback(null, message ?: "Could not refresh route") }
+                override fun notImplemented() { callback(null, "Return to the map to refresh directions") }
+            })
+        }
+        navigation.setMethodCallHandler { call, result ->
+            if (call.method != "openWalkingNavigation") { result.notImplemented(); return@setMethodCallHandler }
+            if (navigationResult != null) { result.error("AR_BUSY", "AR navigation is already open", null); return@setMethodCallHandler }
+            try {
+                val data = call.arguments as? Map<*, *> ?: error("Missing walking route")
+                require((data["route"] as? Map<*, *>)?.get("travelMode") == "WALK") { "AR navigation requires a walking route" }
+                ArNavigationBridge.launchData = data
+                navigationResult = result
+                startActivityForResult(Intent(this, ArWalkingNavigationActivity::class.java), 4204)
+            } catch (_: Exception) {
+                navigationResult = null
+                ArNavigationBridge.launchData = null
+                result.error("AR_LAUNCH_FAILED", "Could not open native AR navigation. Use the map.", null)
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ph.daanar/ar")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -50,6 +75,24 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    @Deprecated("Uses Flutter Activity result forwarding")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 4204) {
+            navigationResult?.success(mapOf("arrived" to (resultCode == RESULT_OK && data?.getBooleanExtra("arrived", false) == true)))
+            navigationResult = null
+            ArNavigationBridge.launchData = null
+        }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        ArNavigationBridge.requestWalkingRoute = null
+        ArNavigationBridge.launchData = null
+        navigationResult?.error("AR_CLOSED", "Navigation connection closed", null)
+        navigationResult = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     private fun openSceneViewer(raw: String): Boolean {

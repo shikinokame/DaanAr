@@ -64,20 +64,21 @@ class HistoryEntry {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'landmark_id': landmarkId,
-        'landmark_name': landmarkName,
-        'municipality_name': municipalityName,
-        'hero_image_url': heroImageUrl,
-        'category': category,
-        'type': type.toJsonValue,
-        'subtitle': subtitle,
-        'timestamp': timestamp.toIso8601String(),
-      };
+    'id': id,
+    'landmark_id': landmarkId,
+    'landmark_name': landmarkName,
+    'municipality_name': municipalityName,
+    'hero_image_url': heroImageUrl,
+    'category': category,
+    'type': type.toJsonValue,
+    'subtitle': subtitle,
+    'timestamp': timestamp.toIso8601String(),
+  };
 
   factory HistoryEntry.fromJson(Map<String, dynamic> json) {
     return HistoryEntry(
-      id: json['id'] as String? ??
+      id:
+          json['id'] as String? ??
           '${json['landmark_id']}_${json['type']}_${json['timestamp']}',
       landmarkId: (json['landmark_id'] as num?)?.toInt() ?? 0,
       landmarkName: json['landmark_name'] as String? ?? 'Heritage Landmark',
@@ -86,7 +87,8 @@ class HistoryEntry {
       category: json['category'] as String? ?? 'historical',
       type: HistoryEntryType.fromJsonValue(json['type'] as String?),
       subtitle: json['subtitle'] as String? ?? 'On-site visit · Verified GPS',
-      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+      timestamp:
+          DateTime.tryParse(json['timestamp'] as String? ?? '') ??
           DateTime.now(),
     );
   }
@@ -108,7 +110,9 @@ class HistoryService {
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
   /// Loads all saved history entries sorted newest-first.
-  Future<List<HistoryEntry>> loadEntries({List<Landmark>? knownLandmarks}) async {
+  Future<List<HistoryEntry>> loadEntries({
+    List<Landmark>? knownLandmarks,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storageKey);
 
@@ -127,7 +131,9 @@ class HistoryService {
       }
     }
 
-    if (knownLandmarks != null && knownLandmarks.isNotEmpty && entries.isNotEmpty) {
+    if (knownLandmarks != null &&
+        knownLandmarks.isNotEmpty &&
+        entries.isNotEmpty) {
       bool updated = false;
       final enriched = entries.map((entry) {
         final matched = _matchLandmark(entry, knownLandmarks);
@@ -222,10 +228,12 @@ class HistoryService {
     final now = DateTime.now();
 
     // Deduplicate repeat logs for the same landmark + type within 15 minutes
-    final recentIdx = entries.indexWhere((e) =>
-        e.landmarkId == landmarkId &&
-        e.type == type &&
-        now.difference(e.timestamp).inMinutes.abs() < 15);
+    final recentIdx = entries.indexWhere(
+      (e) =>
+          e.landmarkId == landmarkId &&
+          e.type == type &&
+          now.difference(e.timestamp).inMinutes.abs() < 15,
+    );
 
     if (recentIdx >= 0) {
       final existing = entries[recentIdx];
@@ -261,7 +269,10 @@ class HistoryService {
   /// Clears all user visit and AR viewing history.
   Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_storageKey, jsonEncode(const <Map<String, dynamic>>[]));
+    await prefs.setString(
+      _storageKey,
+      jsonEncode(const <Map<String, dynamic>>[]),
+    );
     revision.value++;
   }
 
@@ -301,7 +312,7 @@ class HistoryService {
         return Landmark.fromJson(detailMap);
       }
 
-      final allList = await CacheService.loadList(CacheService.keyLandmarks);
+      final allList = (await CacheService.loadLandmarkCatalog())?.records;
       if (allList != null) {
         for (final item in allList) {
           if ((item['id'] as num?)?.toInt() == landmarkId) {

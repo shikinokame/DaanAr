@@ -98,6 +98,8 @@ class RouteResult {
     'WALK' =>
       'Walking directions are in beta and may omit sidewalks or pedestrian paths.',
     'BICYCLE' => 'Bicycle directions are in beta and may omit cycling paths.',
+    'TWO_WHEELER' =>
+      'Motorcycle directions are in beta and may omit suitable paths. Check road conditions.',
     _ => null,
   };
 

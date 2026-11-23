@@ -7,7 +7,10 @@ class CacheService {
   static const _prefix = 'daanar_cache_';
 
   /// Saves a list of JSON-encodable maps under [key].
-  static Future<void> saveList(String key, List<Map<String, dynamic>> data) async {
+  static Future<void> saveList(
+    String key,
+    List<Map<String, dynamic>> data,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefix + key, jsonEncode(data));
   }
@@ -72,10 +75,34 @@ class CacheService {
   }
 
   // Cache keys
-  static const String keyLandmarks         = 'landmarks';
+  static const String keyLandmarks = 'landmarks';
+  static const String keyLandmarkListMeta = 'landmarks_meta';
+  static const String keyLandmarkCatalog = 'landmark_catalog';
   static const String keyFeaturedLandmarks = 'landmarks_featured';
-  static const String keyMunicipalities    = 'municipalities';
-  static const String keyTrails            = 'trails';
+  static const String keyMunicipalities = 'municipalities';
+  static const String keyTrails = 'trails';
+
+  /// Reads the complete catalog, with support for page-one caches from older builds.
+  static Future<({List<Map<String, dynamic>> records, int? total})?>
+  loadLandmarkCatalog() async {
+    final snapshot = await loadMap(keyLandmarkCatalog);
+    final records = snapshot?['records'];
+    if (records is List &&
+        records.every((record) => record is Map<String, dynamic>)) {
+      return (
+        records: records.cast<Map<String, dynamic>>(),
+        total: (snapshot?['total'] as num?)?.toInt(),
+      );
+    }
+
+    final legacyRecords = await loadList(keyLandmarks);
+    if (legacyRecords == null) return null;
+    final legacyMeta = await loadMap(keyLandmarkListMeta);
+    return (
+      records: legacyRecords,
+      total: (legacyMeta?['total'] as num?)?.toInt(),
+    );
+  }
 
   /// Returns the key used to cache a single landmark detail.
   static String landmarkDetailKey(int id) => 'landmark_$id';

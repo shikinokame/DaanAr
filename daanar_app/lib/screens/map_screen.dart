@@ -1268,8 +1268,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       // Collapse / Expand Carousel Handle + Site Counter
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             GestureDetector(
                               onTap: () => setState(
@@ -1315,7 +1315,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 ),
                               ),
                             ),
-                            if (_showModePicker && _selectedLandmark != null)
+                            if (_showModePicker &&
+                                _selectedLandmark != null) ...[
+                              const SizedBox(height: 8),
                               _TransportModeMiniBar(
                                 selectedMode: _selectedMode,
                                 onSelect: (m) {
@@ -1323,6 +1325,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                   _navigateTo(_selectedLandmark!);
                                 },
                               ),
+                            ],
                           ],
                         ),
                       ),
@@ -1548,38 +1551,49 @@ class _TransportModeMiniBar extends StatelessWidget {
         color: AppColors.surface,
         border: Border.all(color: AppColors.rule),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: TransportMode.values.map((m) {
-          final active = m == selectedMode;
-          return GestureDetector(
-            onTap: () => onSelect(m),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              color: active ? AppColors.primary : Colors.transparent,
-              child: Row(
-                children: [
-                  Icon(
-                    m.icon,
-                    size: 13,
-                    color: active ? AppColors.brass : AppColors.charcoal,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    m.label.toUpperCase(),
-                    style: TextStyle(
-                      fontFamily: AppFonts.sans,
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w700,
-                      color: active ? AppColors.surface : AppColors.charcoal,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: TransportMode.values.map((m) {
+            final active = m == selectedMode;
+            return GestureDetector(
+              onTap: () => onSelect(m),
+              child: Container(
+                width: (constraints.maxWidth - 4) / 2,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 9,
+                ),
+                color: active ? AppColors.primary : Colors.transparent,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      m.icon,
+                      size: 16,
+                      color: active ? AppColors.brass : AppColors.charcoal,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        m.label.toUpperCase(),
+                        style: TextStyle(
+                          fontFamily: AppFonts.sans,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: active
+                              ? AppColors.surface
+                              : AppColors.charcoal,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -1717,7 +1731,7 @@ class _AtlasCarouselCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            // Action strip: Navigate + Mode | 3D/AR | Dossier
+            // Action strip: Navigate + Mode | 3D/AR | Details
             SizedBox(
               height: 32,
               child: Row(
@@ -1815,7 +1829,7 @@ class _AtlasCarouselCard extends StatelessWidget {
                         ),
                       ),
                       child: const Text(
-                        'DOSSIER',
+                        'DETAILS',
                         style: TextStyle(
                           fontFamily: AppFonts.sans,
                           fontSize: 10,

@@ -6,7 +6,12 @@ import '../services/landmark_service.dart';
 class LandmarkResult {
   final List<Landmark> landmarks;
   final bool fromCache;
-  const LandmarkResult({required this.landmarks, required this.fromCache});
+  final int? catalogTotal;
+  const LandmarkResult({
+    required this.landmarks,
+    required this.fromCache,
+    this.catalogTotal,
+  });
 }
 
 class LandmarkDetailResult {
@@ -15,13 +20,14 @@ class LandmarkDetailResult {
   const LandmarkDetailResult({required this.landmark, required this.fromCache});
 }
 
-/// All landmarks (page 1, no filters).
+/// Shared catalog for Home, Explore, Map, Passport, and nearby alerts.
 final landmarkListProvider = FutureProvider<LandmarkResult>((ref) async {
   final service = ref.read(landmarkServiceProvider);
   final result = await service.fetchAll();
   return LandmarkResult(
-    landmarks: result['landmarks'] as List<Landmark>,
-    fromCache: result['fromCache'] as bool,
+    landmarks: result.landmarks,
+    fromCache: result.fromCache,
+    catalogTotal: result.catalogTotal,
   );
 });
 
@@ -29,19 +35,23 @@ final landmarkListProvider = FutureProvider<LandmarkResult>((ref) async {
 final featuredLandmarksProvider = FutureProvider<LandmarkResult>((ref) async {
   final service = ref.read(landmarkServiceProvider);
   final result = await service.fetchFeatured();
-  return LandmarkResult(landmarks: result.landmarks, fromCache: result.fromCache);
-});
-
-/// Single landmark by id.
-final landmarkDetailProvider =
-    FutureProvider.family<LandmarkDetailResult, int>((ref, id) async {
-  final service = ref.read(landmarkServiceProvider);
-  final result = await service.fetchById(id);
-  return LandmarkDetailResult(
-    landmark: result.landmark,
+  return LandmarkResult(
+    landmarks: result.landmarks,
     fromCache: result.fromCache,
   );
 });
+
+/// Single landmark by id.
+final landmarkDetailProvider = FutureProvider.family<LandmarkDetailResult, int>(
+  (ref, id) async {
+    final service = ref.read(landmarkServiceProvider);
+    final result = await service.fetchById(id);
+    return LandmarkDetailResult(
+      landmark: result.landmark,
+      fromCache: result.fromCache,
+    );
+  },
+);
 
 /// Notifier for filter state (municipality + category).
 class LandmarkFilterNotifier extends Notifier<LandmarkFilter> {
@@ -70,19 +80,25 @@ class LandmarkFilter {
 
 final landmarkFilterProvider =
     NotifierProvider<LandmarkFilterNotifier, LandmarkFilter>(
-  LandmarkFilterNotifier.new,
-);
+      LandmarkFilterNotifier.new,
+    );
 
 /// Filtered landmark list reacts to filter changes.
 final filteredLandmarksProvider = FutureProvider<LandmarkResult>((ref) async {
   final filter = ref.watch(landmarkFilterProvider);
-  final service = ref.read(landmarkServiceProvider);
-  final result = await service.fetchAll(
-    municipality: filter.municipality,
-    category: filter.category,
-  );
+  final catalog = await ref.watch(landmarkListProvider.future);
+  final municipality = filter.municipality?.toLowerCase();
+  final category = filter.category;
+  if (municipality == null && category == null) return catalog;
   return LandmarkResult(
-    landmarks: result['landmarks'] as List<Landmark>,
-    fromCache: result['fromCache'] as bool,
+    landmarks: catalog.landmarks
+        .where((landmark) {
+          final town = landmark.municipality?.name.toLowerCase() ?? '';
+          return (municipality == null || town.contains(municipality)) &&
+              (category == null || landmark.category == category);
+        })
+        .toList(growable: false),
+    fromCache: catalog.fromCache,
+    catalogTotal: catalog.catalogTotal,
   );
 });
