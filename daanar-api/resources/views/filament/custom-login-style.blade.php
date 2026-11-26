@@ -1,12 +1,57 @@
 <style>
-    /* Dark aesthetic with centered DaanAR watermark logo */
-    body.fi-body {
-        background-color: #0b0f19 !important;
+    .fi-panel-admin {
+        background-color: #f6f4ef;
+        --login-watermark-opacity: 0.09;
+        --login-watermark-shadow: none;
+        --login-vignette: radial-gradient(circle at center, transparent, #e9e1d4aa);
+        --login-card: #fffdfa;
+        --login-border: #ded7c9;
+        --login-shadow: 0 20px 50px -20px rgb(56 45 28 / 25%);
+        --login-heading: #242b23;
+        --login-input: #fff;
+        --login-input-border: #bcb7ac;
+        --login-input-text: #242b23;
+        --login-focus: #a64f08;
+        --login-button: #a64f08;
+        --login-button-hover: #8c4008;
+    }
+
+    html.dark .fi-panel-admin {
+        background-color: #0b0f19;
+        --login-watermark-opacity: 0.18;
+        --login-watermark-shadow: drop-shadow(0 0 50px rgb(0 0 0 / 90%));
+        --login-vignette: radial-gradient(circle at center, rgb(11 15 25 / 30%), rgb(7 10 18 / 85%));
+        --login-card: rgb(18 24 38 / 92%);
+        --login-border: rgb(255 255 255 / 9%);
+        --login-shadow: 0 25px 60px -15px rgb(0 0 0 / 75%), 0 0 35px rgb(245 158 11 / 8%);
+        --login-heading: #f3f4f6;
+        --login-input: rgb(13 18 30 / 80%);
+        --login-input-border: rgb(255 255 255 / 12%);
+        --login-input-text: #f9fafb;
+        --login-focus: #f59e0b;
+        --login-button: linear-gradient(135deg, #f59e0b, #d97706);
+        --login-button-hover: linear-gradient(135deg, #fbbf24, #f59e0b);
+    }
+
+    html:not(.dark) .fi-panel-admin .fi-main-sidebar {
+        background-color: #fcfaf5;
+        border-inline-end: 1px solid #e7e0d3;
+    }
+
+    html:not(.dark) .fi-panel-admin :is(.fi-topbar > nav, .fi-sidebar-header) {
+        background-color: #fffdfa;
+    }
+
+    html:not(.dark) .fi-panel-admin .fi-sidebar-item.fi-active > .fi-sidebar-item-button {
+        background-color: #f5ead3;
+    }
+
+    html:not(.dark) .fi-panel-admin .fi-sidebar-item.fi-active :is(.fi-sidebar-item-icon, .fi-sidebar-item-label) {
+        color: #81500f;
     }
 
     .fi-simple-layout {
         position: relative !important;
-        background-color: #0b0f19 !important;
         overflow: hidden !important;
         min-height: 100vh !important;
     }
@@ -24,19 +69,19 @@
         background-repeat: no-repeat;
         background-position: center;
         background-size: contain;
-        opacity: 0.18;
+        opacity: var(--login-watermark-opacity);
         pointer-events: none;
         z-index: 0;
         border-radius: 50%;
-        filter: drop-shadow(0 0 50px rgba(0, 0, 0, 0.9));
+        filter: var(--login-watermark-shadow);
     }
 
-    /* Subtle ambient dark gradient over the background */
+    /* Subtle ambient gradient over the background */
     .fi-simple-layout::after {
         content: '';
         position: fixed;
         inset: 0;
-        background: radial-gradient(circle at center, rgba(11, 15, 25, 0.3) 0%, rgba(7, 10, 18, 0.85) 100%);
+        background: var(--login-vignette);
         pointer-events: none;
         z-index: 1;
     }
@@ -52,24 +97,24 @@
         z-index: 10 !important;
         max-width: 440px !important;
         width: 100% !important;
-        background: rgba(18, 24, 38, 0.92) !important;
+        background: var(--login-card) !important;
         backdrop-filter: blur(18px) !important;
         -webkit-backdrop-filter: blur(18px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.09) !important;
-        box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 35px rgba(245, 158, 11, 0.08) !important;
+        border: 1px solid var(--login-border) !important;
+        box-shadow: var(--login-shadow) !important;
         border-radius: 1.25rem !important;
         padding: 2.25rem !important;
     }
 
     /* Brand Logo / Header */
     .fi-simple-header .fi-logo {
-        color: #ffffff !important;
+        color: var(--login-heading) !important;
         font-weight: 700 !important;
         letter-spacing: 0.05em !important;
     }
 
     .fi-simple-header-heading {
-        color: #f3f4f6 !important;
+        color: var(--login-heading) !important;
         font-size: 1.5rem !important;
         font-weight: 700 !important;
     }
@@ -78,24 +123,24 @@
     .fi-simple-main input[type="email"],
     .fi-simple-main input[type="password"],
     .fi-simple-main input[type="text"] {
-        background-color: rgba(13, 18, 30, 0.8) !important;
-        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        background-color: var(--login-input) !important;
+        border: 1px solid var(--login-input-border) !important;
         border-radius: 0.625rem !important;
-        color: #f9fafb !important;
+        color: var(--login-input-text) !important;
         padding: 0.75rem 1rem !important;
     }
 
     .fi-simple-main input[type="email"]:focus,
     .fi-simple-main input[type="password"]:focus,
     .fi-simple-main input[type="text"]:focus {
-        border-color: #f59e0b !important;
+        border-color: var(--login-focus) !important;
         box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25) !important;
     }
 
     /* Submit Button (Sign in) */
     .fi-simple-main button[type="submit"],
     .fi-simple-main .fi-btn-primary {
-        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+        background: var(--login-button) !important;
         color: #ffffff !important;
         font-weight: 600 !important;
         font-size: 0.95rem !important;
@@ -112,7 +157,7 @@
 
     .fi-simple-main button[type="submit"]:hover,
     .fi-simple-main .fi-btn-primary:hover {
-        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+        background: var(--login-button-hover) !important;
         transform: translateY(-1px) !important;
         box-shadow: 0 6px 20px rgba(245, 158, 11, 0.45) !important;
     }
